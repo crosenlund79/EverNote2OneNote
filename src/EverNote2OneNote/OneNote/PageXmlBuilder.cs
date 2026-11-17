@@ -9,8 +9,11 @@ namespace EverNote2OneNote.OneNote;
 
 public enum PageMode
 {
-    /// <summary>Text with lists, links, emphasis, images, file attachments and the Evernote creation date.</summary>
+    /// <summary>Text with lists, native tables (images stay in their cells), links, emphasis, images, file attachments and the creation date.</summary>
     Full,
+
+    /// <summary>Like <see cref="Full"/>, but tables become sequential lines; images stay in reading order next to their text.</summary>
+    Sequential,
 
     /// <summary>Conservative fallback: title and plain paragraphs only.</summary>
     TextOnly,
@@ -31,6 +34,9 @@ public sealed class PageXml
 
     /// <summary>Content of the note that could not be migrated as-is.</summary>
     public List<string> Notices { get; } = [];
+
+    /// <summary>True if the page contains native OneNote tables.</summary>
+    public bool HasTables { get; init; }
 }
 
 /// <summary>What the page contains, as read back from OneNote.</summary>
@@ -72,7 +78,7 @@ public static class PageXmlBuilder
 
         var header = Header(note, notebook);
         writer.Added.Add(new AddedText(header, AddedTextPosition.Start));
-        writer.Blocks.Add(new Block(0, ListKind.None, mode == PageMode.Full ? $"<span style='color:#595959;font-size:9pt'>{Encode(header)}</span>" : Encode(header)));
+        writer.Blocks.Add(new Block(0, ListKind.None, mode != PageMode.TextOnly ? $"<span style='color:#595959;font-size:9pt'>{Encode(header)}</span>" : Encode(header)));
 
         bool parsed = false;
         if (note.Content is not null)
@@ -115,7 +121,7 @@ public static class PageXmlBuilder
             }
             if (block.Table is not null)
             {
-                oe.Add(TableElement(block.Table, writer));
+                oe.Add(TableElement(block.Table, writer, index => Media(index, note, data, saveFile, result, writer, inTable: true)));
             }
             else if (block.MediaIndex >= 0)
             {
@@ -133,7 +139,7 @@ public static class PageXmlBuilder
         var page = new XElement(One + "Page",
             new XAttribute(XNamespace.Xmlns + "one", Namespace),
             new XAttribute("ID", pageId));
-        if (mode == PageMode.Full && EnexTimestamp.TryParse(note.Created, out var created))
+        if (mode != PageMode.TextOnly && EnexTimestamp.TryParse(note.Created, out var created))
         {
             page.Add(new XAttribute("dateTime", created.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)));
         }
@@ -145,7 +151,7 @@ public static class PageXmlBuilder
         {
             writer.Notices.Add($"{writer.RemovedControlCharacters} invisible control character(s) that XML cannot hold were left out.");
         }
-        var pageXml = new PageXml { Xml = page.ToString(SaveOptions.DisableFormatting), Title = title };
+        var pageXml = new PageXml { Xml = page.ToString(SaveOptions.DisableFormatting), Title = title, HasTables = writer.Blocks.Any(b => b.Table is not null) };
         pageXml.Attachments.AddRange(result.Attachments);
         pageXml.Added.AddRange(writer.Added);
         pageXml.Notices.AddRange(writer.Notices);
@@ -166,13 +172,17 @@ public static class PageXmlBuilder
         return new PageContent(title.Trim(), text, images, files);
     }
 
-    /// <summary>A OneNote table: one column per cell of the widest row; shorter rows are padded with empty cells.</summary>
-    private static XElement TableElement(TableData table, BlockWriter writer)
+    /// <summary>
+    /// A OneNote table: one column per cell of the widest row; shorter rows are padded with empty cells.
+    /// Each cell keeps its paragraphs and images in their original order.
+    /// </summary>
+    private static XElement TableElement(TableData table, BlockWriter writer, Func<int, XElement> media)
     {
         var rows = table.Rows.Where(r => r.Count > 0).ToList();
         int columns = rows.Max(r => r.Count);
-        var widths = Enumerable.Range(0, columns)
-            .Select(c => Math.Clamp(rows.Max(r => c < r.Count ? r[c].Sum(p => RawText.FromMarkup(p).Length) : 0) * 6.0, 60, 300));
+        var widths = Enumerable.Range(0, columns).Select(c => Math.Clamp(rows.Max(r => c < r.Count
+            ? r[c].Sum(item => item.MediaIndex >= 0 ? 50 : RawText.FromMarkup(item.Html!).Length)
+            : 0) * 6.0, 60, 300));
         var element = new XElement(One + "Table",
             new XAttribute("bordersVisible", "true"),
             new XElement(One + "Columns", widths.Select((width, index) => new XElement(One + "Column",
@@ -183,9 +193,11 @@ public static class PageXmlBuilder
             var rowElement = new XElement(One + "Row");
             for (int c = 0; c < columns; c++)
             {
-                var paragraphs = c < row.Count && row[c].Count > 0 ? row[c] : [""];
+                var items = c < row.Count && row[c].Count > 0 ? row[c] : [new CellItem("")];
                 rowElement.Add(new XElement(One + "Cell", new XElement(One + "OEChildren",
-                    paragraphs.Select(p => new XElement(One + "OE", new XElement(One + "T", new XCData(XmlSafe(p, writer))))))));
+                    items.Select(item => new XElement(One + "OE", item.MediaIndex >= 0
+                        ? media(item.MediaIndex)
+                        : new XElement(One + "T", new XCData(XmlSafe(item.Html!, writer))))))));
             }
             element.Add(rowElement);
         }
@@ -204,25 +216,28 @@ public static class PageXmlBuilder
     }
 
     private static XElement Media(int index, EnexNote note, IReadOnlyDictionary<int, byte[]> data, Func<int, string> saveFile,
-        PageXml result, BlockWriter writer)
+        PageXml result, BlockWriter writer, bool inTable = false)
     {
         var resource = note.Resources[index];
         var bytes = data[index];
         var mime = string.IsNullOrWhiteSpace(resource.Mime) ? "application/octet-stream" : resource.Mime.Trim();
         var fileName = string.IsNullOrWhiteSpace(resource.FileName) ? $"attachment-{index + 1}{Extension(mime)}" : resource.FileName.Trim();
-        var placement = writer.AtEnd.Contains(index) ? "End of page" : writer.AfterTable.Contains(index) ? "After table" : "In place";
+        var placement = inTable ? "In table" : writer.AtEnd.Contains(index) ? "End of page" : writer.AfterTable.Contains(index) ? "After table" : "In place";
 
         if (ImageTypes.Contains(mime))
         {
             result.Attachments.Add(new PlacedAttachment(index, fileName, mime, bytes.Length, true, placement));
             var image = new XElement(One + "Image");
+            // Large images are shown at most 600 pixels wide (450 points), or 400 pixels (300 points) in a table cell;
+            // the full image is kept.
+            double maxPixels = inTable ? 400 : 600;
             if (double.TryParse(resource.Width, NumberStyles.Float, CultureInfo.InvariantCulture, out var w) &&
-                double.TryParse(resource.Height, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) && w > 600 && h > 0)
+                double.TryParse(resource.Height, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) && w > maxPixels && h > 0)
             {
-                // Large images are shown 600 pixels wide (450 points); the full image is kept.
+                double points = maxPixels * 0.75;
                 image.Add(new XElement(One + "Size",
-                    new XAttribute("width", 450.ToString(CultureInfo.InvariantCulture)),
-                    new XAttribute("height", (450 * h / w).ToString("0.##", CultureInfo.InvariantCulture)),
+                    new XAttribute("width", points.ToString("0.##", CultureInfo.InvariantCulture)),
+                    new XAttribute("height", (points * h / w).ToString("0.##", CultureInfo.InvariantCulture)),
                     new XAttribute("isSetByUser", "true")));
             }
             image.Add(new XElement(One + "Data", Convert.ToBase64String(bytes)));
@@ -302,12 +317,15 @@ public static class PageXmlBuilder
     /// <summary>One OE element: a paragraph (inline HTML) or an attachment, at a list nesting level.</summary>
     private sealed record Block(int Level, ListKind List, string? Html, int MediaIndex = -1, TableData? Table = null);
 
-    /// <summary>A simple table: rows of cells, each cell a list of paragraphs (inline HTML).</summary>
+    /// <summary>One item of a table cell: a paragraph (inline HTML) or an image (resource index).</summary>
+    private sealed record CellItem(string? Html, int MediaIndex = -1);
+
+    /// <summary>A simple table: rows of cells, each cell a list of paragraphs and images in their original order.</summary>
     private sealed class TableData
     {
-        public List<List<List<string>>> Rows { get; } = [];
+        public List<List<List<CellItem>>> Rows { get; } = [];
 
-        /// <summary>Attachments referenced inside the table; placed right after it.</summary>
+        /// <summary>Non-image attachments referenced inside the table; placed right after it.</summary>
         public List<int> DeferredMedia { get; } = [];
 
         public void NewRow() => Rows.Add([]);
@@ -321,7 +339,7 @@ public static class PageXmlBuilder
             Rows[^1].Add([]);
         }
 
-        public List<string> Cell
+        public List<CellItem> Cell
         {
             get
             {
@@ -360,6 +378,8 @@ public static class PageXmlBuilder
         public int RemovedControlCharacters { get; set; }
 
         private bool Plain => mode == PageMode.TextOnly;
+
+        private bool NativeTables => mode == PageMode.Full;
 
         public void Reset(int blockCount)
         {
@@ -427,7 +447,7 @@ public static class PageXmlBuilder
 
             if (_flattenedTables > 0)
             {
-                Notices.Add($"{_flattenedTables} table(s) were migrated as lines of text with cells separated by tabs (nested tables, or text-only mode).");
+                Notices.Add($"{_flattenedTables} table(s) were migrated as sequential lines (cells separated by tabs, images in reading order), because they were nested or the page was written without tables.");
             }
             if (_mergedCells > 0)
             {
@@ -507,13 +527,13 @@ public static class PageXmlBuilder
                 case "table":
                     Boundary();
                     _tableDepth++;
-                    if (_tableDepth == 1 && !Plain)
+                    if (_tableDepth == 1 && NativeTables)
                     {
                         _table = new TableData();
                     }
                     else
                     {
-                        _flattenedTables++; // nested table, or text-only mode: cells become tab-separated text
+                        _flattenedTables++; // nested table, or a layout without tables: cells become sequential text
                     }
                     return;
                 case "tr" when _table is not null && _tableDepth == 1:
@@ -668,7 +688,7 @@ public static class PageXmlBuilder
                 var html = _inline.ToString().TrimEnd('\t');
                 if (_table is not null)
                 {
-                    _table.Cell.Add(html); // inside a table: a paragraph of the current cell
+                    _table.Cell.Add(new CellItem(html)); // inside a table: a paragraph of the current cell
                 }
                 else
                 {
@@ -701,7 +721,14 @@ public static class PageXmlBuilder
             Boundary();
             if (_table is not null)
             {
-                _table.DeferredMedia.Add(index); // OneNote cells hold text here; the attachment follows the table
+                if (ImageTypes.Contains(note.Resources[index].Mime?.Trim() ?? ""))
+                {
+                    _table.Cell.Add(new CellItem(null, index)); // images stay in their cell, next to their text
+                }
+                else
+                {
+                    _table.DeferredMedia.Add(index); // file attachments follow the table
+                }
                 return;
             }
             Blocks.Add(new Block(_lists.Count, ListKind.None, null, index));

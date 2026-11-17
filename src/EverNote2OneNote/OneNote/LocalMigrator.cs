@@ -246,20 +246,37 @@ public static class LocalMigrator
                 File.WriteAllBytes(path, data[index]);
                 return path;
             }
-            var page = PageXmlBuilder.Build(pageId, note, summary.File.Notebook, data, SaveFile, PageMode.Full, summary.Text);
-            try
+            // Layouts from richest to simplest; a rejected attempt's (new, own) page is deleted and a fresh one is used.
+            PageXml page = PageXmlBuilder.Build(pageId, note, summary.File.Notebook, data, SaveFile, PageMode.Full, summary.Text);
+            foreach (var mode in new[] { PageMode.Full, PageMode.Sequential, PageMode.TextOnly })
             {
-                oneNote.UpdatePage(page.Xml);
-                result.Method = "Full: text, lists, tables, links, images and attachments";
-            }
-            catch (OneNoteDesktopException ex)
-            {
-                result.Notices.Add($"OneNote rejected the full page ({ex.Message}). It was written again as plain text only; attachments were not transferred.");
-                TryDelete(oneNote, pageId, result);
-                pageId = oneNote.CreatePage(sectionId);
-                page = PageXmlBuilder.Build(pageId, note, summary.File.Notebook, data, SaveFile, PageMode.TextOnly, summary.Text);
-                oneNote.UpdatePage(page.Xml);
-                result.Method = "Text only (fallback)";
+                if (mode == PageMode.Sequential && !page.HasTables)
+                {
+                    continue; // without tables, the sequential layout is the same as the full one
+                }
+                if (mode != PageMode.Full)
+                {
+                    TryDelete(oneNote, pageId, result);
+                    pageId = oneNote.CreatePage(sectionId);
+                    page = PageXmlBuilder.Build(pageId, note, summary.File.Notebook, data, SaveFile, mode, summary.Text);
+                }
+                try
+                {
+                    oneNote.UpdatePage(page.Xml);
+                    result.Method = mode switch
+                    {
+                        PageMode.Full => "Full: text, lists, tables (images in their cells), links, images and attachments",
+                        PageMode.Sequential => "Sequential (fallback): tables as lines, images in reading order next to their text",
+                        _ => "Text only (fallback)",
+                    };
+                    break;
+                }
+                catch (OneNoteDesktopException ex) when (mode != PageMode.TextOnly)
+                {
+                    result.Notices.Add(mode == PageMode.Full && page.HasTables
+                        ? $"OneNote rejected the page with tables ({ex.Message}). It was written again without tables, keeping images next to their text."
+                        : $"OneNote rejected the page ({ex.Message}). It was written again as plain text only; attachments were not transferred.");
+                }
             }
             result.PageId = pageId;
             result.Notices.AddRange(page.Notices);

@@ -81,7 +81,9 @@ conclusion based on that evidence; **Copy to Clipboard** lets you send it. The a
 ### Pilot 2 limitations
 
 - Needs the OneNote desktop app from Microsoft 365 / Office. *OneNote for Windows 10* has no automation API.
-- Simple tables keep their rows and cells (merged cells are split; tables nested in tables become text in their cell).
+- Simple tables keep their rows and cells, with images in their cells next to their text (merged cells are split;
+  tables nested in tables become text in their cell). If OneNote rejects a table, the page is written without
+  tables, with images kept in reading order next to their text.
   Checkboxes become `[x]` / `[ ]` text so the text can be verified exactly. Fonts, colours and sizes are dropped.
 - Links to other Evernote notes become plain text. Encrypted text is replaced by a visible marker. Both are reported.
 - Images are checked by count, because OneNote stores them without file names. Files are checked by name.

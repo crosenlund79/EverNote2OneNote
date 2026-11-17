@@ -98,6 +98,74 @@ public class PageXmlBuilderTests
         Assert.True(TextVerifier.Compare(original, PageXmlBuilder.Read(page.Xml).Text, page.Added).Identical);
     }
 
+    /// <summary>E2O-004: a two-column table with portraits in one column and descriptions in the other.</summary>
+    internal static (EnexNote Note, Dictionary<int, byte[]> Data, string Original) CharacterTable()
+    {
+        byte[] portrait1 = [1, 1, 1], portrait2 = [2, 2, 2];
+        string Md5(byte[] b) => Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(b));
+        var note = new EnexNote { Index = 1, ByteOffset = 0, Line = 1, Title = "DnD - 03 - Characters",
+            Content = Enex.Body("<en-note><div>Party</div><table>" +
+                $"<tr><td><en-media hash=\"{Md5(portrait1)}\" type=\"image/png\"/></td><td><div><b>Aragorn</b></div><div>Ranger of the North</div></td></tr>" +
+                $"<tr><td><en-media hash=\"{Md5(portrait2)}\" type=\"image/jpeg\"/></td><td>Gimli, son of Gloin</td></tr>" +
+                "</table><div>End of list</div></en-note>") };
+        foreach (var (bytes, mime, name) in new[] { (portrait1, "image/png", "aragorn.png"), (portrait2, "image/jpeg", "gimli.jpg") })
+        {
+            var resource = new EnexResource { Mime = mime, Size = bytes.Length, Md5 = Md5(bytes) };
+            resource.Attributes.Add(new("file-name", name));
+            note.Resources.Add(resource);
+        }
+        var data = new Dictionary<int, byte[]> { [0] = portrait1, [1] = portrait2 };
+        return (note, data, EverNote2OneNote.Text.EnmlText.Extract(note.Content).Text);
+    }
+
+    [Fact]
+    public void Images_stay_in_their_table_cells_next_to_their_descriptions()
+    {
+        var (note, data, original) = CharacterTable();
+        XNamespace one = PageXmlBuilder.Namespace;
+
+        var page = PageXmlBuilder.Build("{p}", note, "DnD", data, _ => "", PageMode.Full, original);
+        var xml = XElement.Parse(page.Xml);
+        var rows = xml.Descendants(one + "Table").Single().Elements(one + "Row").ToList();
+
+        Assert.Equal(2, rows.Count);
+        for (int r = 0; r < 2; r++)
+        {
+            var cells = rows[r].Elements(one + "Cell").ToList();
+            Assert.Single(cells[0].Descendants(one + "Image")); // the portrait is in the left cell ...
+            Assert.Empty(cells[1].Descendants(one + "Image"));
+            Assert.Contains(cells[1].Descendants(one + "T"), t => t.Value.Length > 0); // ... next to its description
+        }
+        Assert.Equal(2, xml.Descendants(one + "Image").Count()); // no image outside the table
+        Assert.All(page.Attachments, a => Assert.Equal("In table", a.Placement));
+        Assert.True(page.HasTables);
+
+        var content = PageXmlBuilder.Read(page.Xml);
+        Assert.True(TextVerifier.Compare(original, content.Text, page.Added).Identical);
+        Assert.Equal(2, content.Images);
+    }
+
+    [Fact]
+    public void Sequential_layout_keeps_each_image_directly_before_its_description()
+    {
+        var (note, data, original) = CharacterTable();
+        XNamespace one = PageXmlBuilder.Namespace;
+
+        var page = PageXmlBuilder.Build("{p}", note, "DnD", data, _ => "", PageMode.Sequential, original);
+        var xml = XElement.Parse(page.Xml);
+        var order = xml.Element(one + "Outline")!.Descendants()
+            .Where(e => e.Name == one + "Image" || e.Name == one + "T")
+            .Select(e => e.Name == one + "Image" ? "[image]" : PageXmlBuilderTestsText(e.Value))
+            .Skip(1) // header line
+            .ToList();
+
+        Assert.Empty(xml.Descendants(one + "Table"));
+        Assert.Equal(["Party", "[image]", "Aragorn", "Ranger of the North", "[image]", "Gimli, son of Gloin", "End of list"], order);
+        Assert.True(TextVerifier.Compare(original, PageXmlBuilder.Read(page.Xml).Text, page.Added).Identical);
+    }
+
+    private static string PageXmlBuilderTestsText(string html) => EverNote2OneNote.Text.RawText.FromMarkup(html);
+
     [Fact]
     public void Section_names_follow_onenote_rules()
     {
@@ -175,6 +243,22 @@ public class LocalMigratorTests
     }
 
     [Fact]
+    public void Rejected_tables_fall_back_to_the_sequential_layout_keeping_images()
+    {
+        using var root = new TempDirectory();
+        var oneNote = new FakeOneNote { RejectTables = true };
+        var plan = LocalMigrator.PlanDestination(oneNote, "Evernote Import", Note(0), root.Path, []);
+
+        var result = LocalMigrator.Migrate(Note(0), oneNote, plan, root.Path, exportBackup: false);
+
+        Assert.Null(result.Error);
+        Assert.StartsWith("Sequential", result.Method);
+        Assert.True(result.Text!.Identical);
+        Assert.Equal(["p1"], oneNote.Deleted); // only the rejected new page
+        Assert.All(result.Attachments, a => Assert.True(a.Ok, a.Status));
+    }
+
+    [Fact]
     public void Rejected_pages_are_rewritten_as_text_only_on_a_fresh_page()
     {
         using var root = new TempDirectory();
@@ -186,7 +270,7 @@ public class LocalMigratorTests
         Assert.Null(result.Error);
         Assert.Equal("Text only (fallback)", result.Method);
         Assert.True(result.Text!.Identical);
-        Assert.Equal(["p1"], oneNote.Deleted);
+        Assert.Equal(["p1", "p2"], oneNote.Deleted); // full and sequential attempts, both new pages of this migration
         Assert.All(result.Attachments, a => Assert.False(a.Ok));
     }
 
@@ -238,6 +322,7 @@ public class LocalMigratorTests
         private int _pageCount;
 
         public bool RejectRichContent { get; init; }
+        public bool RejectTables { get; init; }
         public bool PublishWritesNothing { get; init; }
         public List<string> Calls { get; } = [];
         public List<string> Deleted { get; } = [];
@@ -281,7 +366,8 @@ public class LocalMigratorTests
 
         public void UpdatePage(string pageXml)
         {
-            if (RejectRichContent && (pageXml.Contains("one:Image") || pageXml.Contains("one:InsertedFile") || pageXml.Contains("one:Table")))
+            if ((RejectRichContent && (pageXml.Contains("one:Image") || pageXml.Contains("one:InsertedFile") || pageXml.Contains("one:Table"))) ||
+                (RejectTables && pageXml.Contains("one:Table")))
             {
                 throw new OneNoteDesktopException("Invalid XML (0x80042001)", unchecked((int)0x80042001));
             }
