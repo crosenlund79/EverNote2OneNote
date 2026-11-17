@@ -31,7 +31,8 @@ internal static class SelfTest
             else
             {
                 bool reportWritten = File.Exists(Path.Combine(reportDirectory, "report.md"));
-                bool displayed = window.FindingsGrid.Items.Count == result.Issues.Count &&
+                bool displayed = window.MigrateAllButton.IsEnabled &&
+                                 window.FindingsGrid.Items.Count == result.Issues.Count &&
                                  window.NotebooksGrid.Items.Count == result.Files.Count &&
                                  window.AttachmentsGrid.Items.Count == result.Attachments.Count &&
                                  window.NotesGrid.Items.Count == result.Notes.Count;
@@ -46,6 +47,13 @@ internal static class SelfTest
                 await resultWindow.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
                 displayed &= resultWindow.DifferencesGrid.Items.Count == 1;
                 resultWindow.Close();
+
+                // The plan confirmation window (Migrate All Notes) must load with its confirm button.
+                var confirm = new TextReportWindow("Plan (self-test)", "Migrate All Notes - check the plan", "Start Migration") { ShowActivated = false };
+                confirm.Show();
+                await confirm.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+                displayed &= confirm.ConfirmButton.IsVisible;
+                confirm.Close();
 
                 // OneNote desktop automation: on a PC without it (like the build server) there must be a clear explanation, not a crash.
                 string oneNote;

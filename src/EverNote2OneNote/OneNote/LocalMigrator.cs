@@ -5,6 +5,9 @@ namespace EverNote2OneNote.OneNote;
 
 public sealed record AttachmentOutcome(string FileName, string Type, long Size, string Placement, string Status, bool Ok);
 
+/// <summary>Outcome of an optional .onepkg export: the verified package, or why there is none.</summary>
+public sealed record NotebookExport(string? Path, string? Problem, IReadOnlyList<string> Notices);
+
 /// <summary>Where a note will go, determined before anything is written.</summary>
 public sealed class DestinationPlan
 {
@@ -57,6 +60,9 @@ public sealed class LocalMigrationResult
     /// <summary>Set if the migration stopped early.</summary>
     public string? Error { get; set; }
 
+    /// <summary>OneNote's error code (HRESULT) if <see cref="Error"/> came from OneNote, otherwise 0.</summary>
+    public int ErrorCode { get; set; }
+
     public bool TitleMatches { get; set; }
     public TextVerification? Text { get; set; }
     public List<AttachmentOutcome> Attachments { get; } = [];
@@ -82,8 +88,8 @@ public sealed class LocalMigrationResult
 public static class LocalMigrator
 {
     public const string DefaultNotebookName = "Evernote Import";
-    private const long MaxAttachmentBytes = 100L * 1024 * 1024;
-    private static readonly TimeSpan DefaultExportTimeout = TimeSpan.FromMinutes(2);
+    internal const long MaxAttachmentBytes = 100L * 1024 * 1024;
+    internal static readonly TimeSpan DefaultExportTimeout = TimeSpan.FromMinutes(2);
 
     /// <summary>Default location for new notebooks and exports: %LOCALAPPDATA%\EverNote2OneNote\OneNote (never synced by OneDrive).</summary>
     public static string DefaultRoot() => Path.Combine(
@@ -114,14 +120,10 @@ public static class LocalMigrator
         }
 
         // New notebooks, exports and temporary files go under this app's folder; it must not be synced by OneDrive.
-        var syncedBy = oneDriveFolders.FirstOrDefault(f => ReportWriter.IsInside(root, f));
-        if (syncedBy is not null)
+        problem = OneDriveProblem(root, oneDriveFolders);
+        if (problem is not null)
         {
-            return new DestinationPlan
-            {
-                NotebookName = name, SectionName = section,
-                Problem = $"This app's working folder ({root}) is inside the OneDrive folder {syncedBy}; nothing was created, to avoid uploading anything.",
-            };
+            return new DestinationPlan { NotebookName = name, SectionName = section, Problem = problem };
         }
 
         var matches = OneNoteHierarchy.Children(oneNote.GetHierarchyXml("", HierarchyScope.Notebooks), "Notebook")
@@ -188,11 +190,85 @@ public static class LocalMigrator
 
         // 1. Read the note and its attachments from the original ENEX file (read-only).
         progress?.Report("Reading the note from the ENEX file...");
-        var note = EnexReader.ReadNoteAt(summary.File.FullPath, summary.ByteOffset, summary.Index);
+        var source = ReadSource(summary, result);
+        if (source is null)
+        {
+            return result;
+        }
+
+        // 2. Destination: the existing notebook and section, or open-or-create (never a duplicate of the same folder or section file).
+        string notebookId;
+        try
+        {
+            progress?.Report(destination.NotebookExists ? "Opening the destination notebook..." : "Creating the destination notebook...");
+            if (destination.NotebookId is not null)
+            {
+                notebookId = destination.NotebookId;
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(destination.NotebookLocation!)!);
+                notebookId = oneNote.CreateNotebook(destination.NotebookLocation!);
+            }
+            var sectionId = destination.SectionId ?? oneNote.CreateSection(notebookId, destination.SectionName);
+
+            // 3-4. Write the new page and verify it.
+            WriteAndVerify(summary, source, oneNote, sectionId, root, result, progress);
+        }
+        catch (OneNoteDesktopException ex)
+        {
+            result.Error = ex.Message;
+            result.ErrorCode = ex.ErrorCode;
+            return result;
+        }
+
+        // 5. Optional backup: export the notebook as a .onepkg file with OneNote's own publish function.
+        if (exportBackup && result.Error is null)
+        {
+            progress?.Report("Exporting a .onepkg backup of the notebook (optional)...");
+            var export = ExportNotebook(oneNote, notebookId, result.NotebookName ?? "Notebook", root, exportTimeout ?? DefaultExportTimeout, progress);
+            result.ExportPath = export.Path;
+            result.ExportProblem = export.Problem;
+            result.Notices.AddRange(export.Notices);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Migrates one note as a new page into an existing section (used by the bulk migration): reads it from the ENEX file,
+    /// writes the page and verifies it. Never throws for OneNote or file errors; they are recorded in the result.
+    /// </summary>
+    public static LocalMigrationResult MigrateNote(NoteSummary summary, IOneNoteDesktop oneNote, string notebookName, string sectionName,
+        string sectionId, string root, IProgress<string>? progress = null)
+    {
+        var result = new LocalMigrationResult { NoteTitle = summary.Title ?? "", NotebookName = notebookName, Section = sectionName };
+        var source = ReadSource(summary, result);
+        if (source is not null)
+        {
+            WriteAndVerify(summary, source, oneNote, sectionId, root, result, progress);
+        }
+        return result;
+    }
+
+    /// <summary>The note and the data of its attachments, read from the ENEX file.</summary>
+    private sealed record NoteSource(EnexNote Note, Dictionary<int, byte[]> Data, Dictionary<int, string> Unavailable);
+
+    private static NoteSource? ReadSource(NoteSummary summary, LocalMigrationResult result)
+    {
+        EnexNote note;
+        try
+        {
+            note = EnexReader.ReadNoteAt(summary.File.FullPath, summary.ByteOffset, summary.Index);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException)
+        {
+            result.Error = "The note could not be read from the ENEX file: " + ex.Message;
+            return null;
+        }
         if (summary.TextStatus == TextStatus.Extracted && (note.Content is null || note.Title != summary.Title))
         {
             result.Error = "The note could not be read from the ENEX file as inspected; the file may have changed. Run the inspection again.";
-            return result;
+            return null;
         }
         var data = new Dictionary<int, byte[]>();
         var unavailable = new Dictionary<int, string>();
@@ -208,7 +284,7 @@ public static class LocalMigrator
             {
                 data[i] = EnexReader.ReadAttachmentData(summary.File.FullPath, summary.ByteOffset, i, resource.Md5, MaxAttachmentBytes);
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException)
             {
                 unavailable[i] = "Not transferred: the data could not be read from the export (" + ex.Message + ")";
             }
@@ -217,26 +293,24 @@ public static class LocalMigrator
         {
             result.Notices.Add($"{note.UnreadAttachments} attachment(s) in this damaged note could not be read from the export.");
         }
+        return new NoteSource(note, data, unavailable);
+    }
 
+    /// <summary>
+    /// Creates a new page in the section, writes the note (richest layout OneNote accepts), reads it back and verifies it.
+    /// OneNote errors are recorded in the result; a page creation that failed is never retried.
+    /// </summary>
+    private static void WriteAndVerify(NoteSummary summary, NoteSource source, IOneNoteDesktop oneNote, string sectionId, string root,
+        LocalMigrationResult result, IProgress<string>? progress)
+    {
+        var (note, data, unavailable) = (source.Note, source.Data, source.Unavailable);
         var tempFolder = Path.Combine(root, "Temp", Guid.NewGuid().ToString("N"));
+        string? pageId = null;
         try
         {
-            // 2. Destination: the existing notebook and section, or open-or-create (never a duplicate of the same folder or section file).
-            progress?.Report(destination.NotebookExists ? "Opening the destination notebook..." : "Creating the destination notebook...");
-            string notebookId;
-            if (destination.NotebookId is not null)
-            {
-                notebookId = destination.NotebookId;
-            }
-            else
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(destination.NotebookLocation!)!);
-                notebookId = oneNote.CreateNotebook(destination.NotebookLocation!);
-            }
-            var sectionId = destination.SectionId ?? oneNote.CreateSection(notebookId, destination.SectionName);
-            var pageId = oneNote.CreatePage(sectionId);
+            pageId = oneNote.CreatePage(sectionId);
 
-            // 3. Write the new page. If OneNote rejects the full page, use a fresh page with plain text only.
+            // 3. Write the new page. If OneNote rejects it, use a fresh page with a simpler layout.
             progress?.Report("Writing the page...");
             string SaveFile(int index)
             {
@@ -247,6 +321,7 @@ public static class LocalMigrator
                 return path;
             }
             // Layouts from richest to simplest; a rejected attempt's (new, own) page is deleted and a fresh one is used.
+            // A lost connection is not a rejection: nothing more is attempted, so nothing is written twice.
             PageXml page = PageXmlBuilder.Build(pageId, note, summary.File.Notebook, data, SaveFile, PageMode.Full, summary.Text);
             foreach (var mode in new[] { PageMode.Full, PageMode.Sequential, PageMode.TextOnly })
             {
@@ -257,6 +332,7 @@ public static class LocalMigrator
                 if (mode != PageMode.Full)
                 {
                     TryDelete(oneNote, pageId, result);
+                    pageId = null;
                     pageId = oneNote.CreatePage(sectionId);
                     page = PageXmlBuilder.Build(pageId, note, summary.File.Notebook, data, SaveFile, mode, summary.Text);
                 }
@@ -271,7 +347,7 @@ public static class LocalMigrator
                     };
                     break;
                 }
-                catch (OneNoteDesktopException ex) when (mode != PageMode.TextOnly)
+                catch (OneNoteDesktopException ex) when (mode != PageMode.TextOnly && !OneNoteDesktopException.IsConnectionLost(ex.ErrorCode))
                 {
                     result.Notices.Add(mode == PageMode.Full && page.HasTables
                         ? $"OneNote rejected the page with tables ({ex.Message}). It was written again without tables, keeping images next to their text."
@@ -306,17 +382,19 @@ public static class LocalMigrator
                     result.Attachments.Add(new AttachmentOutcome(resource.FileName ?? $"attachment-{i + 1}", resource.Mime ?? "", resource.Size, "-", reason, false));
                 }
             }
-
-            // 5. Optional backup: export the notebook as a .onepkg file with OneNote's own publish function.
-            if (exportBackup)
-            {
-                progress?.Report("Exporting a .onepkg backup of the notebook (optional)...");
-                Export(oneNote, notebookId, result, root, exportTimeout ?? DefaultExportTimeout, progress);
-            }
         }
         catch (OneNoteDesktopException ex)
         {
             result.Error = ex.Message;
+            result.ErrorCode = ex.ErrorCode;
+            if (pageId is not null && result.PageId is null)
+            {
+                result.Notices.Add($"A new page created for this note may be incomplete (page ID {pageId}). It was left in place, not retried.");
+            }
+            else if (pageId is null)
+            {
+                result.Notices.Add("OneNote reported an error while creating the page. A blank page may have been created; it was not retried.");
+            }
         }
         finally
         {
@@ -332,20 +410,20 @@ public static class LocalMigrator
                 // Temporary copies of attachments; a later run can remove them.
             }
         }
-        return result;
     }
 
     /// <summary>
     /// Publishes the notebook as a .onepkg to a new file and waits for OneNote to finish writing it: OneNote may return
     /// before the package exists. Never overwrites a file; reports exactly what happened.
     /// </summary>
-    private static void Export(IOneNoteDesktop oneNote, string notebookId, LocalMigrationResult result, string root, TimeSpan timeout,
-        IProgress<string>? progress)
+    public static NotebookExport ExportNotebook(IOneNoteDesktop oneNote, string notebookId, string notebookName, string root, TimeSpan timeout,
+        IProgress<string>? progress = null)
     {
+        var notices = new List<string>();
         var folder = Path.Combine(root, "Exports");
         Directory.CreateDirectory(folder);
         var stamp = DateTime.Now.ToString("yyyy-MM-dd HHmmss", System.Globalization.CultureInfo.InvariantCulture);
-        var target = UniquePath(Path.Combine(folder, $"{Format.FileName(result.NotebookName ?? "Notebook")} {stamp}"), ".onepkg");
+        var target = UniquePath(Path.Combine(folder, $"{Format.FileName(notebookName, 100)} {stamp}"), ".onepkg");
         var before = Directory.GetFiles(folder, "*.onepkg").ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         try
@@ -354,7 +432,7 @@ public static class LocalMigrator
         }
         catch (OneNoteDesktopException ex)
         {
-            result.Notices.Add($"OneNote could not save the notebook before exporting ({ex.Message}); the export was still attempted.");
+            notices.Add($"OneNote could not save the notebook before exporting ({ex.Message}); the export was still attempted.");
         }
         try
         {
@@ -362,13 +440,13 @@ public static class LocalMigrator
         }
         catch (OneNoteDesktopException ex)
         {
-            result.ExportProblem = $"OneNote could not export the notebook to {target}: {ex.Message}";
-            return;
+            return new NotebookExport(null, $"OneNote could not export the notebook to {target}: {ex.Message}", notices);
         }
 
         progress?.Report("Waiting for OneNote to finish writing the .onepkg file...");
         var deadline = DateTime.UtcNow + timeout;
         long lastSize = -1;
+        int stableChecks = 0;
         string? candidate = null;
         while (DateTime.UtcNow < deadline)
         {
@@ -379,9 +457,10 @@ public static class LocalMigrator
             if (candidate is not null)
             {
                 long size = new FileInfo(candidate).Length;
-                if (size > 0 && size == lastSize && CanRead(candidate))
+                stableChecks = size > 0 && size == lastSize ? stableChecks + 1 : 0;
+                if (stableChecks >= 2 && CanRead(candidate))
                 {
-                    break; // finished: size unchanged since the last check and no longer locked by OneNote
+                    break; // finished: size unchanged for two checks and no longer locked by OneNote
                 }
                 lastSize = size;
             }
@@ -390,21 +469,30 @@ public static class LocalMigrator
 
         if (candidate is null)
         {
-            result.ExportProblem = $"OneNote accepted the export request, but no .onepkg file appeared in {folder} within {timeout.TotalSeconds:0} seconds.";
-            return;
+            return new NotebookExport(null,
+                $"OneNote accepted the export request, but no .onepkg file appeared in {folder} within {timeout.TotalSeconds:0} seconds.", notices);
         }
         var problem = CheckPackage(candidate);
         if (problem is not null)
         {
-            result.ExportProblem = problem + $" ({candidate})";
-            return;
+            return new NotebookExport(null, problem + $" ({candidate})", notices);
         }
-        result.ExportPath = candidate;
         if (!string.Equals(candidate, target, StringComparison.OrdinalIgnoreCase))
         {
-            result.Notices.Add($"OneNote saved the package as \"{Path.GetFileName(candidate)}\" instead of \"{Path.GetFileName(target)}\".");
+            notices.Add($"OneNote saved the package as \"{Path.GetFileName(candidate)}\" instead of \"{Path.GetFileName(target)}\".");
         }
+        return new NotebookExport(candidate, null, notices);
     }
+
+    /// <summary>Replaces characters that this app never uses in notebook and section names (invalid or risky in OneNote) with "_".</summary>
+    internal static string CleanName(string name) =>
+        new(name.Select(c => "?*\\/:<>|&#\"'%~".Contains(c) || char.IsControl(c) ? '_' : c).ToArray());
+
+    /// <summary>Refuses to work if this app's folder is synced by OneDrive (nothing may be uploaded).</summary>
+    internal static string? OneDriveProblem(string root, IReadOnlyList<string> oneDriveFolders) =>
+        oneDriveFolders.FirstOrDefault(f => ReportWriter.IsInside(root, f)) is { } syncedBy
+            ? $"This app's working folder ({root}) is inside the OneDrive folder {syncedBy}; nothing was created, to avoid uploading anything."
+            : null;
 
     /// <summary>OneNote notebook names: 1 to 128 characters, without characters that are invalid in folder names.</summary>
     public static string? NotebookNameProblem(string name)
@@ -427,8 +515,7 @@ public static class LocalMigrator
     /// <summary>OneNote section names: at most 50 characters, without characters that are invalid in names or file names.</summary>
     public static string SectionName(string notebook)
     {
-        var chars = notebook.Select(c => "?*\\/:<>|&#\"'%~".Contains(c) || char.IsControl(c) ? '_' : c).ToArray();
-        var name = new string(chars).Trim().TrimEnd('.');
+        var name = CleanName(notebook).Trim().TrimEnd('.');
         if (name.Length > 50)
         {
             name = name[..50].TrimEnd();

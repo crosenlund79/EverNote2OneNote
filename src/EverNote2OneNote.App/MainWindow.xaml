@@ -25,19 +25,21 @@
             <Button x:Name="OpenReportButton" Content="Open Report Folder" Padding="18,6" Margin="8,0,0,0" IsEnabled="False" Click="OpenReport_Click" />
         </StackPanel>
 
-        <!-- 3. OneNote (single-note migration) -->
+        <!-- 3. OneNote: one selected note, or all notes into new notebooks -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,10,0,0">
-            <TextBlock Text="Destination OneNote notebook:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBlock Text="Destination notebook (selected note):" VerticalAlignment="Center" Margin="0,0,8,0" />
             <TextBox x:Name="DestinationBox" Width="220" Padding="4" Text="Evernote Import" TextChanged="Destination_TextChanged" />
             <TextBlock x:Name="DestinationStatus" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
-                       Text="Checked in OneNote when you migrate." />
+                       Text="Checked in OneNote when you migrate. Migrate All Notes always creates new notebooks." />
         </StackPanel>
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,8,0,0">
+        <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,8,0,0">
             <Button x:Name="MigrateButton" Content="Migrate Selected Note" Padding="18,6" FontWeight="SemiBold" IsEnabled="False" Click="Migrate_Click" />
+            <Button x:Name="MigrateAllButton" Content="Migrate All Notes" Padding="18,6" Margin="8,0,0,0" FontWeight="SemiBold" IsEnabled="False" Click="MigrateAll_Click" />
+            <Button x:Name="StopButton" Content="Stop After Current Note" Padding="18,6" Margin="8,0,0,0" Visibility="Collapsed" Click="Stop_Click" />
             <Button x:Name="CheckOneNoteButton" Content="Check OneNote Connection" Padding="18,6" Margin="8,0,0,0" Click="CheckOneNote_Click" />
-            <CheckBox x:Name="ExportBackupBox" Content="Also export a .onepkg backup of the notebook" IsChecked="True"
+            <CheckBox x:Name="ExportBackupBox" Content="Also export a .onepkg backup of each notebook" IsChecked="True"
                       VerticalAlignment="Center" Margin="12,0,0,0" />
-        </StackPanel>
+        </WrapPanel>
 
         <!-- Progress -->
         <StackPanel DockPanel.Dock="Top" Margin="0,12,0,0">
@@ -47,7 +49,7 @@
         </StackPanel>
 
         <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" Foreground="#666" TextWrapping="Wrap"
-                   Text="Read-only: your .enex files are never changed and nothing is uploaded. The detailed report contains note titles and text - keep it private." />
+                   Text="Your .enex files are only read, never changed, and nothing is uploaded. Reports contain note titles and text - keep them private." />
 
         <!-- Result -->
         <Border x:Name="ResultBanner" DockPanel.Dock="Top" Margin="0,12,0,0" Padding="12,8" CornerRadius="4" Visibility="Collapsed">
@@ -113,7 +115,7 @@
             <TabItem x:Name="NotesTab" Header="Notes">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="4,4,4,6" Foreground="#555" TextWrapping="Wrap"
-                               Text="To migrate one note: select it here, check the destination notebook above, then click Migrate Selected Note. The note becomes a new page in the section named after its Evernote notebook. Existing pages are never changed." />
+                               Text="To migrate one note: select it here, check the destination notebook above, then click Migrate Selected Note. To migrate every note: click Migrate All Notes (new notebooks: one per folder, one section per ENEX file, one page per note). Existing pages are never changed." />
                     <DataGrid x:Name="NotesGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                               SelectionMode="Single" SelectionUnit="FullRow" SelectionChanged="NotesGrid_SelectionChanged"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E5E5E5">

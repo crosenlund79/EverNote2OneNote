@@ -17,7 +17,8 @@ The intended flow is simply **Select source → Migrate → Verify → Report**.
 | Decision | Choice | Reason |
 |---|---|---|
 | Source format | Evernote **ENEX** exports | Complete and authoritative (original ENML plus every attachment), offline and re-readable. The official Evernote MCP server (beta, paid plans only) has no documented enumeration, pagination or completeness check, and Evernote's own server would decide what text we receive. The classic Evernote API is deprecated. |
-| Target structure | One dedicated OneNote notebook per migration; each ENEX file becomes a section | Simple and needs no configuration. Existing notebooks are never modified. |
+| Target structure | Bulk migration: each folder of ENEX files becomes a **new** notebook (`EverNote`, `EverNote - Folder`, `EverNote - Folder - Subfolder`), each ENEX file a section, each note a page. A taken name gets a marked unique name (`… (Import yyyy-MM-dd HHmm)`) | Predictable and traceable; existing notebooks are never used or modified. |
+| Bulk reliability | One note at a time; a journal line per note; failures recorded and the run continues; stops on a lost OneNote connection or 5 failures in a row; an ambiguous page-creation failure is never retried; stop after the current note on request | A partial or repeated write is worse than a reported failure. |
 | Verification | Detect **missing, reordered or duplicated** text by comparing the ordered source text with the text read back from OneNote | A simple "every word exists" check would miss reordering and duplication. |
 | On a verification mismatch | **Report and allow controlled retries**; never auto-append text | Keeps the user in control. |
 | Malformed input | Never silently discard text. Isolate damage per note, recover text from raw markup, keep the original markup in the report, and grade the finding as an error | Priority 1 |
@@ -33,18 +34,18 @@ ENEX files (read-only)
   → Inspector      findings (Error / Warning / Info) per file and note
   → Summary / ReportWriter   console summary (counts only) + private local report
   → Windows app / CLI        thin front ends over the same engine
-  ... later pilots:
-  → Converter      ENML → OneNote-safe HTML subset (text kept even where formatting is dropped)
-  → OneNote client Microsoft Graph, delegated sign-in, throttling
-  → Journal        append-only local progress file: resume without duplicate pages
-  → Verifier       read pages back and compare ordered text with the source
+  → PageXmlBuilder ENML → OneNote page XML (text kept even where formatting is dropped)
+  → LocalMigrator  one note → new page via the OneNote desktop API, read back, verify; optional .onepkg export
+  → BulkMigrator   plan (folders → new notebooks, files → sections, exclusions), run note by note,
+                   journal.jsonl, migration-report.md, migration-notes.csv
+  → TextVerifier   compares the ordered page text with the source text
 ```
 
 | Path | Contents |
 |---|---|
 | `src/EverNote2OneNote/Enex` | `EnexScanner` (byte-level note boundaries, skips CDATA/comments), `EnexReader` (strict read-only parsing, per-note error isolation, raw recovery), note model |
 | `src/EverNote2OneNote/Text` | `EnmlText` (XML walk with built-in HTML entity table, no DTD or network access), `RawText` (fallback: removes only recognised tags), `TextBuilder` |
-| `src/EverNote2OneNote/OneNote` | Pilot 2 (local OneNote desktop app): `PageXmlBuilder` (ENML to OneNote page XML; all text kept, formatting simplified; reads pages back), `IOneNoteDesktop` (the few COM operations used; implemented in the app by `OneNoteCom`), `LocalMigrator` (one note: new uniquely named local notebook, write page, read back, verify, export `.onepkg`), `TextVerifier` (whitespace-insensitive character diff: missing, extra, moved, duplicated) |
+| `src/EverNote2OneNote/OneNote` | Pilot 2 (local OneNote desktop app): `PageXmlBuilder` (ENML to OneNote page XML; all text kept, formatting simplified; reads pages back), `IOneNoteDesktop` (the few COM operations used; implemented in the app by `OneNoteCom`), `LocalMigrator` (one note: write a new page, read back, verify, export `.onepkg`), `BulkMigrator` (Pilot 3: plan and run the migration of all notes into new notebooks, journal and report), `TextVerifier` (whitespace-insensitive character diff: missing, extra, moved, duplicated) |
 | `src/EverNote2OneNote/Inspection` | `Inspector`, finding catalogue (`IssueCodes`), `Summary`, `ReportWriter` |
 | `src/EverNote2OneNote.Cli` | `e2o inspect` |
 | `src/EverNote2OneNote.App` | WPF test application: choose folder → Inspect Archive → results and report folder. The inspection runs on a background thread with per-file progress. A hidden `--self-test` switch lets the Windows build pipeline run the published exe end to end. |

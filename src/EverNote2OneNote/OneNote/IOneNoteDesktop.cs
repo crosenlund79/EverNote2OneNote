@@ -46,6 +46,14 @@ public interface IOneNoteDesktop
 public sealed class OneNoteDesktopException(string message, int errorCode = 0, Exception? inner = null) : Exception(message, inner)
 {
     public int ErrorCode { get; } = errorCode;
+
+    /// <summary>True for errors that mean OneNote closed, crashed or stopped responding (nothing more can be done in this connection).</summary>
+    public static bool IsConnectionLost(int errorCode) => unchecked((uint)errorCode) is
+        0x80010108 or // RPC_E_DISCONNECTED
+        0x800706BA or // RPC_S_SERVER_UNAVAILABLE
+        0x800706BE or // RPC_S_CALL_FAILED
+        0x800706BF or // RPC_S_CALL_FAILED_DNE
+        0x80080005;   // CO_E_SERVER_EXEC_FAILURE
 }
 
 public static class OneNoteHierarchy

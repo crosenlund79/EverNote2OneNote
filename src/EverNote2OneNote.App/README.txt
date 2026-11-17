@@ -1,11 +1,11 @@
-EverNote2OneNote - test application (Pilot 1 inspection, Pilot 2 single-note migration)
-======================================================================================
+EverNote2OneNote - test application (inspection, single-note and full migration)
+================================================================================
 
 What it does
   Reads your Evernote export files (.enex), checks every note, and shows what it found:
   notebooks, notes, attachments, whether all note text could be extracted, and any
   warnings or errors. Your .enex files are only read, never changed.
-  Pilot 2: you can also migrate ONE selected note into the OneNote desktop app (local only).
+  You can also migrate one selected note, or all notes, into the OneNote desktop app (local only).
 
 Before you start
   In Evernote, export each notebook as an ENEX file (right-click the notebook,
@@ -33,7 +33,7 @@ Pilot 2: migrate one note into the OneNote desktop app
   Requires the OneNote desktop app (Microsoft 365 / Office) on this PC. No sign-in,
   no cloud service.
   1. Inspect your export, open the "Notes" tab and select one note.
-  2. Check "Destination OneNote notebook" (default: Evernote Import). If a notebook with that
+  2. Check "Destination notebook (selected note)" (default: Evernote Import). If a notebook with that
      name is open in OneNote it is used; otherwise a new local notebook is created
      (%LOCALAPPDATA%\EverNote2OneNote\OneNote\Notebooks\, not synced by OneDrive).
   3. Click "Migrate Selected Note". For an existing notebook, or if a page with the same title
@@ -43,6 +43,26 @@ Pilot 2: migrate one note into the OneNote desktop app
      backup" checked, the notebook is also exported (optional; never overwrites a file).
   5. The result window shows text differences, attachment results, the backup location, and
      buttons "Show Page in OneNote" and "Open Export Folder".
+
+Pilot 3: migrate all notes
+  1. Inspect your export folder, then click "Migrate All Notes".
+  2. Check the plan and click "Start Migration" (nothing is written before that):
+     - .enex files directly in the folder go to a NEW notebook "EverNote"; files in a subfolder
+       "Gaming" go to "EverNote - Gaming"; deeper folders: "EverNote - Gaming - Campaigns".
+     - Each .enex file becomes a section, each note a new page.
+     - If a notebook name is already taken, the new notebook gets a marked unique name, e.g.
+       "EverNote - Gaming (Import 2026-11-17 2015)". Existing notebooks are never used or changed.
+     - Notes that could not be read at all are excluded and listed with the reason.
+  3. While it runs, the window shows the current notebook, section and note and the counts.
+     "Stop After Current Note" finishes the current note, then stops. Failed notes are recorded
+     and the run continues; it stops by itself if OneNote closes, or after 5 failures in a row.
+  4. With the backup option checked, each new notebook is exported once at the end (.onepkg).
+  5. The report says COMPLETE only if every note and attachment was migrated and verified;
+     otherwise INCOMPLETE, with the reasons. "Open Report Folder" shows migration-report.md,
+     migration-notes.csv (every note and its destination) and journal.jsonl (progress log),
+     in %LOCALAPPDATA%\EverNote2OneNote\OneNote\Runs\. They contain note titles: keep them private.
+  Running it again creates new notebooks; nothing is ever deleted. Remove test notebooks
+  yourself in OneNote when you no longer need them.
 
 If the migration fails with a OneNote/COM error (for example 0x8002801D)
   Click "Check OneNote Connection" (read-only). It analyses OneNote's automation and type library

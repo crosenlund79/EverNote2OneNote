@@ -11,14 +11,14 @@ See [docs/architecture.md](docs/architecture.md) for the design and decisions.
 | Milestone | Scope | Status |
 |---|---|---|
 | Pilot 1 | Read and inspect ENEX exports locally (read-only): Windows app and command line | **Done** |
-| Pilot 2 | Migrate one selected note into the local OneNote desktop app, verify it, export `.onepkg` | **Ready for testing** |
-| Pilot 3 | Migration journal, resume, verification, report | Not started |
+| Pilot 2 | Migrate one selected note into the local OneNote desktop app, verify it, export `.onepkg` | **Done** |
+| Pilot 3 | Migrate all notes into new notebooks, with progress, stop, journal, verification and a final report | **Ready for testing** |
 
 ## Try Pilot 1 on Windows (no installation)
 
 The test application reads your `.enex` files **without modifying them**, checks every note and shows
 notebooks, notes, attachments, text extraction status, warnings and errors. Nothing is uploaded
-(until you use the Pilot 2 migration below).
+(until you use the migration below).
 
 1. **Export from Evernote:** export each notebook as ENEX (right-click the notebook → *Export notebook…* → `.enex`)
    into one folder, e.g. `C:\EvernoteExport`. Keep the default file names, because they become the notebook names.
@@ -49,8 +49,8 @@ Requires the **OneNote desktop app** (Microsoft 365 / Office) on the same PC. No
 Azure, app registration or sign-in is used: the app talks to OneNote through its documented local automation
 API (COM).
 
-In the Windows app: inspect your export, open the **Notes** tab, select one note, check the **Destination OneNote
-notebook** (default `Evernote Import`), and click **Migrate Selected Note**.
+In the Windows app: inspect your export, open the **Notes** tab, select one note, check the **Destination notebook
+(selected note)** (default `Evernote Import`), and click **Migrate Selected Note**.
 
 - **Destination:** if a notebook with that name is open in OneNote, it is used; otherwise a new local notebook with
   that name is created in `%LOCALAPPDATA%\EverNote2OneNote\OneNote\Notebooks\` (not synced by OneDrive). Each Evernote
@@ -71,6 +71,42 @@ notebook** (default `Evernote Import`), and click **Migrate Selected Note**.
 - If OneNote rejects the full page, the app writes it again on a fresh page as plain text only and reports that
   attachments were not transferred. If the OneNote automation API is not available, it stops with an explanation.
 
+## Pilot 3: migrate all notes
+
+Inspect your export folder, then click **Migrate All Notes**.
+
+1. **Plan (nothing is written yet).** The app shows the complete plan and starts only when you click **Start Migration**:
+   - Each folder becomes a **new** notebook: `.enex` files directly in the export folder go to `EverNote`, files in
+     `Gaming\` go to `EverNote - Gaming`, files in `Gaming\Campaigns\` go to `EverNote - Gaming - Campaigns`.
+   - Each `.enex` file becomes a section named after the file, and each note becomes a new page.
+   - Existing notebooks are never used. If a name is already taken (a notebook open in OneNote, or a notebook folder
+     from an earlier import), the new notebook gets a clearly marked unique name, e.g.
+     `EverNote - Gaming (Import 2026-11-17 2015)`. Two folders or files that would get the same name get ` (2)`.
+   - Notes whose text could not be read at all are **excluded** and listed with the reason. Read errors in an `.enex`
+     file are listed too. Characters that can cause problems in OneNote names (`? * \ / : < > | & # " ' % ~`) become `_`.
+2. **Migration.** Notes are migrated one at a time with the same engine as a single note. The window shows the
+   current notebook, section and note, how many are done, migrated and failed. **Stop After Current Note** finishes
+   the current note and stops cleanly. A failed note is recorded and the run continues. The run stops by itself if
+   OneNote closes or stops responding, or after 5 failures in a row. A page creation that failed is never retried
+   (a blank page may exist; the report says so). Nothing is ever deleted.
+3. **Optional backup.** With *Also export a .onepkg backup of each notebook* checked, each new notebook is exported
+   once, after all notes. A failed export is reported but does not affect the migrated pages. Existing files are never
+   overwritten.
+4. **Report.** It says **COMPLETE** only if every note was migrated and verified, every attachment was found on its
+   page, nothing was excluded, stopped or damaged in the export, and no note contains encrypted text that could not be
+   migrated. Otherwise it says **INCOMPLETE** and lists why. It counts notes and attachments discovered, migrated, with
+   verified text, with missing or changed text, failed, excluded and not attempted; and attachments transferred and missing.
+   **Open Report Folder** opens `%LOCALAPPDATA%\EverNote2OneNote\OneNote\Runs\Migration <date time>\`:
+   - `migration-report.md`: the report
+   - `migration-notes.csv`: every note with its ENEX file, note number, destination notebook and section, status and details
+   - `journal.jsonl`: progress log written while migrating (one line per step, with the source file path and note
+     number), so it shows what was done even if the PC stops unexpectedly
+
+   These files contain note titles: keep them private.
+
+To migrate again, run Migrate All Notes again: it creates new, uniquely named notebooks. It never continues or changes
+an earlier import, and it never deletes anything; remove test notebooks yourself in OneNote when you no longer need them.
+
 ### If the migration fails with a OneNote/COM error
 
 Click **Check OneNote Connection**. It is read-only: it reads OneNote's automation and type library registrations
@@ -78,7 +114,7 @@ Click **Check OneNote Connection**. It is read-only: it reads OneNote's automati
 for the list of open notebooks both by name (late-bound) and through the typed interface. Its report ends with a
 conclusion based on that evidence; **Copy to Clipboard** lets you send it. The app never changes the registry.
 
-### Pilot 2 limitations
+### Limitations (Pilot 2 and 3)
 
 - Needs the OneNote desktop app from Microsoft 365 / Office. *OneNote for Windows 10* has no automation API.
 - Simple tables keep their rows and cells, with images in their cells next to their text (merged cells are split;
@@ -88,8 +124,10 @@ conclusion based on that evidence; **Copy to Clipboard** lets you send it. The a
 - Links to other Evernote notes become plain text. Encrypted text is replaced by a visible marker. Both are reported.
 - Images are checked by count, because OneNote stores them without file names. Files are checked by name.
   Attachments over 100 MB are not transferred and are reported.
-- Only notebooks that are open in OneNote are recognised as existing; a closed notebook with the same name elsewhere
-  is not found (a new local one would be created).
+- Only notebooks that are open in OneNote (or folders in this app's notebook folder) are recognised as existing; a
+  closed notebook with the same name elsewhere is not found.
+- Migrate All Notes cannot resume an interrupted run; running it again creates new notebooks. The journal and the
+  CSV show exactly which notes were migrated.
 
 ## Command-line tool (for developers)
 

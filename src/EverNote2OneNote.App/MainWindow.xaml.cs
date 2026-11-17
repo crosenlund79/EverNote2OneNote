@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -13,9 +14,14 @@ namespace EverNote2OneNote.App;
 public partial class MainWindow : Window
 {
     private readonly bool _quiet;
+    private const string DestinationHint = "Checked in OneNote when you migrate. Migrate All Notes always creates new notebooks.";
     private readonly HashSet<string> _confirmedNotebooks = new(StringComparer.OrdinalIgnoreCase);
     private bool _busy;
     private string? _reportDirectory;
+    private InspectionResult? _inspection;
+
+    /// <summary>Set while Migrate All Notes runs; cancelling it stops the run after the current note.</summary>
+    private CancellationTokenSource? _bulkCancel;
 
     public MainWindow() : this(quiet: false)
     {
@@ -176,8 +182,115 @@ public partial class MainWindow : Window
     {
         if (DestinationStatus is not null)
         {
-            DestinationStatus.Text = "Checked in OneNote when you migrate.";
+            DestinationStatus.Text = DestinationHint;
         }
+    }
+
+    /// <summary>
+    /// Migrates every inspected note into new notebooks (one per folder, one section per ENEX file), one note at a time.
+    /// Shows the plan first and starts only after confirmation; can be stopped after the current note.
+    /// </summary>
+    private async void MigrateAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (_inspection is not { } inspection)
+        {
+            return;
+        }
+        bool exportBackup = ExportBackupBox.IsChecked == true;
+        SetBusy(true);
+        try
+        {
+            // 1. Plan (read-only: lists OneNote's open notebooks) and confirm.
+            StatusText.Text = "Planning the migration (read-only): checking the notebooks that are open in OneNote...";
+            var root = LocalMigrator.DefaultRoot();
+            var plan = await Task.Run(() =>
+            {
+                using var oneNote = OneNoteCom.Connect();
+                return BulkMigrator.Plan(inspection, oneNote, root, LocalMigrator.OneDriveFolders(), DateTime.Now);
+            });
+            if (plan.Problem is not null)
+            {
+                ShowError(plan.Problem, null);
+                return;
+            }
+            var confirm = new TextReportWindow(plan.Describe(exportBackup), "Migrate All Notes - check the plan", "Start Migration") { Owner = this };
+            if (confirm.ShowDialog() != true)
+            {
+                StatusText.Text = "Migration cancelled; nothing was written.";
+                return;
+            }
+
+            // 2. Migrate, one note at a time, in the background.
+            _bulkCancel = new CancellationTokenSource();
+            var token = _bulkCancel.Token;
+            StopButton.Content = "Stop After Current Note";
+            StopButton.IsEnabled = true;
+            StopButton.Visibility = Visibility.Visible;
+            ProgressBar.Value = 0;
+            StatusText.Text = "Connecting to the OneNote desktop app...";
+            var progress = new Progress<BulkProgress>(ShowBulkProgress);
+            var result = await Task.Run(() =>
+            {
+                using var oneNote = OneNoteCom.Connect();
+                return BulkMigrator.Run(plan, oneNote, exportBackup, progress, token);
+            });
+
+            // 3. Report (late progress updates are ignored from here on).
+            _bulkCancel.Dispose();
+            _bulkCancel = null;
+            StopButton.Visibility = Visibility.Collapsed;
+            StatusText.Text = result.Headline + $" Report: {result.RunFolder}";
+            new TextReportWindow(result.ReportText(), "Migration report", folder: result.RunFolder) { Owner = this }.ShowDialog();
+        }
+        catch (OneNoteDesktopException ex)
+        {
+            ShowError("Migration stopped. " + ex.Message, null);
+        }
+        catch (Exception ex)
+        {
+            ShowError("The migration could not be completed.", ex);
+        }
+        finally
+        {
+            _bulkCancel?.Dispose();
+            _bulkCancel = null;
+            StopButton.Visibility = Visibility.Collapsed;
+            SetBusy(false);
+        }
+    }
+
+    private void ShowBulkProgress(BulkProgress progress)
+    {
+        if (_bulkCancel is null)
+        {
+            return; // a late update after the run has finished
+        }
+        ProgressBar.Value = progress.Total == 0 ? 0 : (double)progress.Completed / progress.Total;
+        var where = progress.Section is null ? progress.Notebook : $"{progress.Notebook} > {progress.Section}";
+        var note = progress.Note is null ? "" : $" > \"{progress.Note}\"";
+        var step = progress.Step is null ? "" : $"  ({progress.Step})";
+        var stopping = _bulkCancel.IsCancellationRequested ? "  Stopping after the current note..." : "";
+        StatusText.Text = $"{where}{note}{step}\n{progress.Completed} of {progress.Total} notes done: {progress.Migrated} migrated " +
+                          $"({progress.Review} to review), {progress.Failed} failed.{stopping}";
+    }
+
+    private void Stop_Click(object sender, RoutedEventArgs e)
+    {
+        _bulkCancel?.Cancel();
+        StopButton.IsEnabled = false;
+        StopButton.Content = "Stopping after the current note...";
+    }
+
+    /// <summary>Closing during Migrate All Notes could interrupt a page; the run must be stopped first.</summary>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (_bulkCancel is not null)
+        {
+            e.Cancel = true;
+            MessageBox.Show(this, "A migration is running. Click \"Stop After Current Note\", wait for the report, then close the app.",
+                "EverNote2OneNote", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        base.OnClosing(e);
     }
 
     private static void ShowInOneNote(string pageId)
@@ -263,6 +376,7 @@ public partial class MainWindow : Window
             });
 
             _reportDirectory = reportDirectory;
+            _inspection = result;
             ShowResults(result, summary);
             ProgressBar.IsIndeterminate = false;
             ProgressBar.Value = 1;
@@ -324,6 +438,7 @@ public partial class MainWindow : Window
     private void ClearResults()
     {
         _reportDirectory = null;
+        _inspection = null;
         ResultBanner.Visibility = FiguresList.Visibility = ResultTabs.Visibility = Visibility.Collapsed;
         FiguresList.ItemsSource = null;
         FindingsGrid.ItemsSource = null;
@@ -343,6 +458,7 @@ public partial class MainWindow : Window
         InspectButton.IsEnabled = !busy && FolderBox.Text.Length > 0;
         OpenReportButton.IsEnabled = !busy && _reportDirectory is not null;
         MigrateButton.IsEnabled = !busy && NotesGrid.SelectedItem is NoteRow;
+        MigrateAllButton.IsEnabled = !busy && _inspection is { Notes.Count: > 0 };
         CheckOneNoteButton.IsEnabled = !busy;
         DestinationBox.IsEnabled = !busy;
         ExportBackupBox.IsEnabled = !busy;
