@@ -44,8 +44,6 @@ Pilot 2: migrate one note into the OneNote desktop app
   When done, close the test notebook in OneNote (right-click it > Close This Notebook).
 
 If the migration fails with a OneNote/COM error (for example 0x8002801D)
-  Click "Check OneNote Connection" (read-only). Its report ends with a conclusion and repair
-  steps; "Copy to Clipboard" lets you send it. 0x8002801D (TYPE_E_LIBNOTREGISTERED) means
-  OneNote's type library registration is broken - an Office installation problem. Repair:
-  Settings > Apps > Installed apps > Microsoft 365 > ... > Modify > Quick Repair (then, if
-  needed, Online Repair). This app never changes the registry.
+  Click "Check OneNote Connection" (read-only). It analyses OneNote's automation and type library
+  registrations and tests read-only calls; its report ends with an evidence-based conclusion.
+  "Copy to Clipboard" lets you send it. This app never changes the registry.

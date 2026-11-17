@@ -69,21 +69,10 @@ In the Windows app: inspect your export, open the **Notes** tab, select one note
 
 ### If the migration fails with a OneNote/COM error
 
-Click **Check OneNote Connection**. It is read-only: it checks OneNote's automation registration, loads its type
-library without registering anything, and asks OneNote for the list of open notebooks. Its report ends with a
-conclusion and, if needed, repair steps. Copy the report if you need help.
-
-Error `0x8002801D` (`TYPE_E_LIBNOTREGISTERED`) means OneNote's type library is missing or registered incorrectly.
-This is an Office installation problem; every program that automates OneNote depends on that registration.
-To repair it (the app never changes the registry itself):
-
-1. Close OneNote and this app.
-2. Windows **Settings → Apps → Installed apps** → *Microsoft 365* (or *Microsoft Office*) → **… → Modify** →
-   **Quick Repair** → **Repair**.
-3. Open OneNote once normally, close it, and run **Check OneNote Connection** again.
-4. If it still fails, repeat step 2 with **Online Repair** (reinstalls Office; notebooks are not affected).
-5. Only if the check still lists a **BROKEN** type library entry under `HKEY_CURRENT_USER`: back up (export) exactly
-   that key in Registry Editor and delete it, then check again.
+Click **Check OneNote Connection**. It is read-only: it reads OneNote's automation and type library registrations
+(including where each entry is stored), loads the type libraries without registering anything, and asks OneNote
+for the list of open notebooks both by name (late-bound) and through the typed interface. Its report ends with a
+conclusion based on that evidence; **Copy to Clipboard** lets you send it. The app never changes the registry.
 
 ### Pilot 2 limitations
 
