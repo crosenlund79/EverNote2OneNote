@@ -13,7 +13,7 @@ public sealed record FindingRow(string Severity, string Code, string Meaning, st
 /// <param name="InBody">True if the note body displays the attachment; false if it only belongs to the note.</param>
 public sealed record AttachmentRow(
     bool InBody, string Reference, string FileName, string Type, string Size,
-    string Notebook, string Note, string NoteTitle, string NoteCreated);
+    string Notebook, string Note, string NoteTitle, string NoteCreated, AttachmentSummary Attachment);
 
 /// <summary>The inspection result shaped for display. No logic beyond grouping and counting.</summary>
 public sealed record ResultView(
@@ -83,7 +83,8 @@ public sealed record ResultView(
                 a.Note.File.Notebook,
                 a.Note.Index.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 a.Note.Title ?? "(untitled)",
-                Format.Date(a.Note.Created)))
+                Format.Date(a.Note.Created),
+                a))
             .ToList();
 
         return new ResultView(figures, notebooks, findings, attachments);

@@ -119,6 +119,75 @@ public sealed partial class EnexReader : IDisposable
     public void Dispose() => _stream.Dispose();
 
     /// <summary>
+    /// Decodes one attachment on demand. The file is opened read-only, parsing starts at the note's byte offset,
+    /// other attachments are skipped without decoding, and the decoded data is checked against the expected MD5.
+    /// </summary>
+    /// <param name="resourceIndex">0-based position of the attachment within the note.</param>
+    /// <exception cref="InvalidDataException">The attachment was not found, is larger than <paramref name="maxBytes"/>,
+    /// or its data no longer matches (the file changed since it was inspected).</exception>
+    public static byte[] ReadAttachmentData(string path, long noteOffset, int resourceIndex, string? expectedMd5, long maxBytes)
+    {
+        const string changed = "The export file may have changed since it was inspected; run the inspection again.";
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        stream.Position = noteOffset;
+        var settings = SegmentSettings.Clone();
+        settings.ConformanceLevel = ConformanceLevel.Fragment; // the file continues after this note
+        using var r = XmlReader.Create(stream, settings);
+
+        r.MoveToContent();
+        if (r.NodeType != XmlNodeType.Element || r.LocalName != "note" || r.IsEmptyElement)
+        {
+            throw new InvalidDataException("The note was not found at its recorded position. " + changed);
+        }
+        r.ReadStartElement();
+        int position = 0;
+        while (r.MoveToContent() == XmlNodeType.Element)
+        {
+            if (r.LocalName == "resource" && position++ == resourceIndex && !r.IsEmptyElement)
+            {
+                r.ReadStartElement();
+                while (r.MoveToContent() == XmlNodeType.Element)
+                {
+                    if (r.LocalName == "data")
+                    {
+                        return DecodeData(r, expectedMd5, maxBytes, changed);
+                    }
+                    r.Skip();
+                }
+                break;
+            }
+            r.Skip();
+        }
+        throw new InvalidDataException("The attachment was not found in the note. " + changed);
+    }
+
+    private static byte[] DecodeData(XmlReader r, string? expectedMd5, long maxBytes, string changed)
+    {
+        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        using var output = new MemoryStream();
+        if (!r.IsEmptyElement)
+        {
+            var buffer = new byte[96 * 1024];
+            int read;
+            while ((read = r.ReadElementContentAsBase64(buffer, 0, buffer.Length)) > 0)
+            {
+                if (output.Length + read > maxBytes)
+                {
+                    throw new InvalidDataException($"The attachment is larger than {maxBytes:N0} bytes.");
+                }
+                output.Write(buffer, 0, read);
+                md5.AppendData(buffer, 0, read);
+            }
+        }
+        var actual = Convert.ToHexStringLower(md5.GetHashAndReset());
+        if (expectedMd5 is not null && !actual.Equals(expectedMd5, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("The attachment data does not match what was inspected. " + changed);
+        }
+        return output.ToArray();
+    }
+
+    /// <summary>
     /// For a damaged note: recovers from the raw markup whatever the XML parser could not read
     /// (title, dates, tags, body text) and counts attachments that could not be inventoried.
     /// </summary>

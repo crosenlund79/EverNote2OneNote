@@ -176,12 +176,14 @@ public static class Inspector
         };
         result.Notes.Add(summary);
 
-        foreach (var resource in note.Resources)
+        for (int position = 0; position < note.Resources.Count; position++)
         {
+            var resource = note.Resources[position];
             bool isReferenced = resource.Md5 is not null && referenced.Contains(resource.Md5);
             result.Attachments.Add(new AttachmentSummary
             {
                 Note = summary,
+                ResourceIndex = position,
                 FileName = resource.FileName,
                 Mime = resource.Mime,
                 Size = resource.Size,

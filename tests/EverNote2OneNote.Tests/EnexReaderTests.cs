@@ -55,6 +55,26 @@ public class EnexReaderTests
     }
 
     [Fact]
+    public void Single_attachments_are_decoded_on_demand_and_verified()
+    {
+        var result = Inspection.Inspector.Run(TestFiles.Fixture("Basic/Recipes.enex"));
+        Assert.Equal(3, result.Attachments.Count);
+
+        foreach (var a in result.Attachments) // includes the second attachment of a note
+        {
+            var data = EnexReader.ReadAttachmentData(a.Note.File.FullPath, a.Note.ByteOffset, a.ResourceIndex, a.Md5, 1_000_000);
+            Assert.Equal(a.Size, data.Length);
+            Assert.Equal(a.Md5, Convert.ToHexStringLower(MD5.HashData(data)));
+        }
+
+        var photo = Assert.Single(result.Attachments, a => a.FileName == "photo.jpg");
+        Assert.Throws<InvalidDataException>(() => EnexReader.ReadAttachmentData(
+            photo.Note.File.FullPath, photo.Note.ByteOffset, photo.ResourceIndex, new string('0', 32), 1_000_000));
+        Assert.Throws<InvalidDataException>(() => EnexReader.ReadAttachmentData(
+            photo.Note.File.FullPath, photo.Note.ByteOffset, photo.ResourceIndex, photo.Md5, maxBytes: 10));
+    }
+
+    [Fact]
     public void A_damaged_note_does_not_hide_the_notes_after_it()
     {
         using var reader = EnexReader.Open(TestFiles.Fixture("Problems/Damaged.enex"));

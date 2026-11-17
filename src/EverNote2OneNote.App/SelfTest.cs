@@ -33,9 +33,21 @@ internal static class SelfTest
                 bool displayed = window.FindingsGrid.Items.Count == result.Issues.Count &&
                                  window.NotebooksGrid.Items.Count == result.Files.Count &&
                                  window.AttachmentsGrid.Items.Count == result.Attachments.Count;
+                // Preview every image attachment: valid images must show, damaged ones must be reported, not crash.
+                var previews = new List<string>();
+                foreach (var row in ((IEnumerable<AttachmentRow>)window.AttachmentsGrid.ItemsSource)
+                         .Where(r => PreviewWindow.CanPreview(r.Attachment.Mime)))
+                {
+                    var preview = new PreviewWindow(row) { ShowActivated = false };
+                    preview.Show();
+                    await preview.LoadAsync();
+                    previews.Add($"{row.FileName}:{(preview.ImageShown ? "shown" : "error")}");
+                    preview.Close();
+                }
+
                 log = $"notes={result.Notes.Count} notebooks={result.Files.Count} attachments={result.Attachments.Count} " +
                       $"findings={result.Issues.Count} errors={result.CountIssues(Severity.Error)} " +
-                      $"report={reportWritten} displayed={displayed}";
+                      $"report={reportWritten} displayed={displayed} previews={string.Join(",", previews)}";
                 exitCode = reportWritten && displayed ? 0 : 1;
             }
             window.Close();

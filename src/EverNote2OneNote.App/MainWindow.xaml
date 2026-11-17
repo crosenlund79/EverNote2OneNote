@@ -114,10 +114,14 @@
                 </DataGrid>
             </TabItem>
             <TabItem x:Name="AttachmentsTab" Header="Attachments">
+                <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Margin="4,4,4,6" Foreground="#555" TextWrapping="Wrap"
+                           Text="Double-click an image to preview it. All attachments will be kept during migration, including those that only belong to the note." />
                 <DataGrid x:Name="AttachmentsGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                           HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E5E5E5">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
+                            <EventSetter Event="MouseDoubleClick" Handler="AttachmentRow_DoubleClick" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding InBody}" Value="False">
                                     <Setter Property="Background" Value="#FFF4CE" />
@@ -136,6 +140,7 @@
                         <DataGridTextColumn Header="Note created" Binding="{Binding NoteCreated}" Width="135" />
                     </DataGrid.Columns>
                 </DataGrid>
+                </DockPanel>
             </TabItem>
             <TabItem Header="Summary (safe to share)">
                 <TextBox x:Name="SummaryBox" IsReadOnly="True" FontFamily="Consolas" FontSize="12" BorderThickness="0" Padding="6"

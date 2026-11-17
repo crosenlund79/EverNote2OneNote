@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using EverNote2OneNote.Inspection;
@@ -61,6 +62,23 @@ public partial class MainWindow : Window
         {
             ShowError("The report folder could not be opened.", ex);
         }
+    }
+
+    private void AttachmentRow_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not DataGridRow { Item: AttachmentRow row })
+        {
+            return;
+        }
+        if (!PreviewWindow.CanPreview(row.Attachment.Mime))
+        {
+            var type = string.IsNullOrEmpty(row.Type) ? "of unknown type" : row.Type;
+            MessageBox.Show(this,
+                $"Preview is available for images only (PNG, JPEG, GIF, BMP, TIFF).\n\n\"{row.FileName}\" is {type}.",
+                "EverNote2OneNote", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        new PreviewWindow(row) { Owner = this }.ShowDialog();
     }
 
     /// <summary>Runs the inspection in the background and shows the result. Returns null if it failed.</summary>

@@ -18,6 +18,7 @@ How to run
   3. Click "Browse..." and choose the folder that contains your .enex files.
   4. Click "Inspect Archive" and wait for it to finish.
   5. Review the results. Click "Open Report Folder" for the detailed report.
+     On the Attachments tab, double-click an image to preview it.
 
 The results
   - Green: all note text was read and nothing needs attention.

@@ -86,6 +86,10 @@ public sealed class NoteSummary
 public sealed class AttachmentSummary
 {
     public required NoteSummary Note { get; init; }
+
+    /// <summary>0-based position of the attachment within its note (used to read its data on demand).</summary>
+    public int ResourceIndex { get; init; }
+
     public string? FileName { get; init; }
     public string? Mime { get; init; }
     public long Size { get; init; }

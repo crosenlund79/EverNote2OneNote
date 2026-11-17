@@ -29,7 +29,8 @@ notebooks, notes, attachments, text extraction status, warnings and errors. Noth
    It is self-contained, so .NET is not required.
 4. If Windows shows *"Windows protected your PC"*, click **More info → Run anyway**. The test build is not code-signed.
 5. Click **Browse…**, choose your export folder, then click **Inspect Archive**.
-6. Review the result. **Open Report Folder** shows the detailed report:
+6. Review the result. On the **Attachments** tab, double-click an image to preview it (decoded on demand from the
+   original `.enex` file; nothing is extracted). **Open Report Folder** shows the detailed report:
    - `report.md`: every finding with note title and location
    - `notes.csv`, `attachments.csv`: one row per note or attachment (open in Excel)
    - `recovered\`: notes whose text had to be recovered from damaged markup, with the original markup
