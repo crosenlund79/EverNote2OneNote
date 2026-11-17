@@ -48,6 +48,10 @@ public static partial class EnmlText
 
     public static EnmlExtraction Extract(string enml)
     {
+        // Exports usually indent the CDATA body, so whitespace precedes the XML declaration, which XML forbids.
+        // It lies outside the note's root element, so removing it cannot remove note text.
+        enml = enml.TrimStart().TrimStart('﻿').TrimStart();
+
         var result = new EnmlExtraction();
         var prepared = ResolveEntities(enml, result.UnknownEntities);
         try

@@ -113,6 +113,30 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
+            <TabItem x:Name="AttachmentsTab" Header="Attachments">
+                <DataGrid x:Name="AttachmentsGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                          HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E5E5E5">
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding InBody}" Value="False">
+                                    <Setter Property="Background" Value="#FFF4CE" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Reference" Binding="{Binding Reference}" Width="140" />
+                        <DataGridTextColumn Header="File name" Binding="{Binding FileName}" Width="*" />
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="120" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="70" />
+                        <DataGridTextColumn Header="Notebook" Binding="{Binding Notebook}" Width="130" />
+                        <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="45" />
+                        <DataGridTextColumn Header="Note title" Binding="{Binding NoteTitle}" Width="*" />
+                        <DataGridTextColumn Header="Note created" Binding="{Binding NoteCreated}" Width="135" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
             <TabItem Header="Summary (safe to share)">
                 <TextBox x:Name="SummaryBox" IsReadOnly="True" FontFamily="Consolas" FontSize="12" BorderThickness="0" Padding="6"
                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />

@@ -99,6 +99,30 @@ public class InspectorTests
     }
 
     [Fact]
+    public void Indented_note_bodies_are_parsed_normally_and_attachments_are_matched()
+    {
+        // Real Evernote exports put the body on its own indented line, so whitespace precedes the XML declaration.
+        using var temp = new TempDirectory();
+        var image = new byte[] { 1, 2, 3, 4 };
+        var md5 = Convert.ToHexStringLower(MD5.HashData(image));
+        var note =
+            "<note>\n  <title>Indented</title>\n  <content>\n    <![CDATA[" +
+            Enex.Body($"<en-note><div>Line one</div><div>Line two</div><en-media hash=\"{md5}\" type=\"image/png\"/></en-note>") +
+            "]]>\n  </content>\n" +
+            $"  <resource><data encoding=\"base64\">{Convert.ToBase64String(image)}</data><mime>image/png</mime></resource>\n</note>\n";
+        var path = temp.Write("Indented.enex", Enex.File(note));
+
+        var result = Inspector.Run(path);
+
+        var summary = Assert.Single(result.Notes);
+        Assert.Equal(TextStatus.Extracted, summary.TextStatus);
+        Assert.Null(summary.Problem);
+        Assert.Equal("Line one\nLine two", summary.Text);
+        Assert.True(Assert.Single(result.Attachments).Referenced);
+        Assert.DoesNotContain(result.Issues, i => i.Code is IssueCodes.ContentMalformed or IssueCodes.UnreferencedAttachment);
+    }
+
+    [Fact]
     public void Duplicate_notebook_names_are_reported()
     {
         using var temp = new TempDirectory();

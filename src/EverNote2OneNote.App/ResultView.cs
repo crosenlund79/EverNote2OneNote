@@ -10,8 +10,15 @@ public sealed record NotebookRow(
 
 public sealed record FindingRow(string Severity, string Code, string Meaning, string File, string Note, string Title, string Details);
 
+/// <param name="InBody">True if the note body displays the attachment; false if it only belongs to the note.</param>
+public sealed record AttachmentRow(
+    bool InBody, string Reference, string FileName, string Type, string Size,
+    string Notebook, string Note, string NoteTitle, string NoteCreated);
+
 /// <summary>The inspection result shaped for display. No logic beyond grouping and counting.</summary>
-public sealed record ResultView(IReadOnlyList<Figure> Figures, IReadOnlyList<NotebookRow> Notebooks, IReadOnlyList<FindingRow> Findings)
+public sealed record ResultView(
+    IReadOnlyList<Figure> Figures, IReadOnlyList<NotebookRow> Notebooks, IReadOnlyList<FindingRow> Findings,
+    IReadOnlyList<AttachmentRow> Attachments)
 {
     public static ResultView From(InspectionResult result)
     {
@@ -62,6 +69,23 @@ public sealed record ResultView(IReadOnlyList<Figure> Figures, IReadOnlyList<Not
                 i.Message))
             .ToList();
 
-        return new ResultView(figures, notebooks, findings);
+        // Attachments not shown in the note body first, as those are the ones to check manually in Evernote.
+        var attachments = result.Attachments
+            .OrderBy(a => a.Referenced)
+            .ThenBy(a => a.Note.File.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Note.Index)
+            .Select(a => new AttachmentRow(
+                a.Referenced,
+                a.Referenced ? "Shown in note body" : "Belongs to note only",
+                a.FileName ?? "(no file name)",
+                a.Mime ?? "",
+                Format.Bytes(a.Size),
+                a.Note.File.Notebook,
+                a.Note.Index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                a.Note.Title ?? "(untitled)",
+                Format.Date(a.Note.Created)))
+            .ToList();
+
+        return new ResultView(figures, notebooks, findings, attachments);
     }
 }

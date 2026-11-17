@@ -31,7 +31,8 @@ internal static class SelfTest
             {
                 bool reportWritten = File.Exists(Path.Combine(reportDirectory, "report.md"));
                 bool displayed = window.FindingsGrid.Items.Count == result.Issues.Count &&
-                                 window.NotebooksGrid.Items.Count == result.Files.Count;
+                                 window.NotebooksGrid.Items.Count == result.Files.Count &&
+                                 window.AttachmentsGrid.Items.Count == result.Attachments.Count;
                 log = $"notes={result.Notes.Count} notebooks={result.Files.Count} attachments={result.Attachments.Count} " +
                       $"findings={result.Issues.Count} errors={result.CountIssues(Severity.Error)} " +
                       $"report={reportWritten} displayed={displayed}";

@@ -144,8 +144,13 @@ public partial class MainWindow : Window
         FiguresList.ItemsSource = view.Figures;
         FindingsGrid.ItemsSource = view.Findings;
         NotebooksGrid.ItemsSource = view.Notebooks;
+        AttachmentsGrid.ItemsSource = view.Attachments;
         FindingsTab.Header = $"Findings ({view.Findings.Count})";
         NotebooksTab.Header = $"Notebooks ({view.Notebooks.Count})";
+        int notInBody = view.Attachments.Count(a => !a.InBody);
+        AttachmentsTab.Header = notInBody > 0
+            ? $"Attachments ({view.Attachments.Count}, {notInBody} not in body)"
+            : $"Attachments ({view.Attachments.Count})";
         SummaryBox.Text = summary;
         ResultTabs.SelectedItem = errors + warnings > 0 ? FindingsTab : NotebooksTab;
         ResultBanner.Visibility = FiguresList.Visibility = ResultTabs.Visibility = Visibility.Visible;
@@ -158,6 +163,7 @@ public partial class MainWindow : Window
         FiguresList.ItemsSource = null;
         FindingsGrid.ItemsSource = null;
         NotebooksGrid.ItemsSource = null;
+        AttachmentsGrid.ItemsSource = null;
         SummaryBox.Text = "";
         ProgressBar.Value = 0;
         StatusText.Text = "Looking for .enex files...";
