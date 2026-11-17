@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-export SYSTEM "http://xml.evernote.com/pub/evernote-export4.dtd">
+<en-export export-date="20261117T090000Z" application="Evernote" version="10.105.4">
+<note><title>Pancakes &amp; Syrup</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>Mix flour&nbsp;and milk. Caf&eacute; cr&egrave;me br&ucirc;l&eacute;e&mdash;optional&hellip;</div><div><br/></div><ul><li><en-todo checked="true"/>Buy eggs</li><li><en-todo checked="false"/>Heat pan</li></ul><table><tr><td colspan="2">Ingredients</td></tr><tr><td>Flour</td><td>200 g</td></tr></table><div>See <a href="https://example.com/pancakes?a=1&amp;b=2">the recipe <b>site</b></a>.</div><div><en-media hash="b357a19c87624c7c4d131aeeb4ae677f" type="image/png"/></div><pre>  line one
+    indented line</pre></en-note>]]></content><created>20120315T081500Z</created><updated>20130102T190000Z</updated><tag>breakfast</tag><tag>sweet</tag><note-attributes><author>Test Author</author><source-url>https://example.com/pancakes</source-url><application-data key="synthetic">value</application-data></note-attributes><resource><data encoding="base64">
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6
+kgAAAABJRU5ErkJggg==
+</data><mime>image/png</mime><width>1</width><height>1</height><resource-attributes><file-name>pan.png</file-name></resource-attributes></resource></note>
+<note><title>Shopping list</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>Milk</div><div>Bread</div><div>Shopping list for Saturday, &lt;not&gt; urgent &amp; cheap</div><en-media hash="b33f8ab3fc2cba631d098816431e1027" type="application/pdf"/></en-note>]]></content><created>20200101T120000Z</created><updated>20200103T120000Z</updated><task><title>Call the bakery</title><created>20200101T000000Z</created><updated>20200101T000000Z</updated><taskStatus>open</taskStatus><inNote>true</inNote><taskFlag>false</taskFlag><sortWeight>A</sortWeight><noteLevelID>t1</noteLevelID><taskGroupNoteLevelID>g1</taskGroupNoteLevelID><reminder><created>20200101T000000Z</created><updated>20200101T000000Z</updated><noteLevelID>r1</noteLevelID><reminderDate>20200102T090000Z</reminderDate></reminder></task><resource><data encoding="base64">
+JVBERi0xLjQKJSBzeW50aGV0aWMgdGVzdCBmaWxlCjEgMCBvYmogPDwgPj4gZW5kb2JqCnRyYWls
+ZXIgPDwgPj4KJSVFT0YK
+</data><mime>application/pdf</mime><resource-attributes><file-name>list.pdf</file-name><attachment>true</attachment></resource-attributes></resource><resource><data encoding="base64">
+/9j/4HN5bnRoZXRpYyBqcGVnIGJ5dGVz/9k=
+</data><mime>image/jpeg</mime><width>640</width><height>480</height><recognition><![CDATA[<?xml version="1.0" encoding="UTF-8"?><recoIndex><item><t w="50">receipt</t></item></recoIndex>]]></recognition><resource-attributes><source-url>https://example.com/photo</source-url><timestamp>20200101T000000Z</timestamp><file-name>photo.jpg</file-name></resource-attributes></resource></note>
+</en-export>

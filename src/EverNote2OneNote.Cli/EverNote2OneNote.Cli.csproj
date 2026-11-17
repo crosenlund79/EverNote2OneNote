@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>e2o</AssemblyName>
+    <RootNamespace>EverNote2OneNote.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EverNote2OneNote\EverNote2OneNote.csproj" />
+  </ItemGroup>
+
+</Project>

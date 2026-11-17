@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-export SYSTEM "http://xml.evernote.com/pub/evernote-export4.dtd">
+<en-export export-date="20261117T090000Z" application="Evernote" version="10.105.4">
+<note><title>Before damage</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>First note is fine.</div></en-note>]]></content><created>20120315T081500Z</created><updated>20130102T190000Z</updated></note>
+<note><title>Fish & Chips</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>Batter recipe: flour, beer &amp; salt.</div><div>Fry at 180 degrees.</div></en-note>]]></content><created>20120315T081500Z</created><updated>20130102T190000Z</updated></note>
+<note><title>Broken body</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>Unclosed <b>bold</div><div>Still here</div><p>a < b and c > d</p><p>Keep x <y z> w</p></en-note>]]></content><created>20120315T081500Z</created><updated>20130102T190000Z</updated></note>
+<note><title>Odd structures</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>Price &bogus; 10</div><section>Sectioned text</section><en-media hash="0123456789abcdef0123456789abcdef" type="image/png"/></en-note>]]></content><created>2020-01-01</created><updated>20130102T190000Z</updated><custom-field>Keep me</custom-field></note>
+stray text
+<note><title>After damage</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>Last note is fine.</div></en-note>]]></content><created>20120315T081500Z</created><updated>20130102T190000Z</updated></note>
+</en-export>

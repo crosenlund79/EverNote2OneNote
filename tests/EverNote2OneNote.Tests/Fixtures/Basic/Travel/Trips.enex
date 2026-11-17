@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE en-export SYSTEM "http://xml.evernote.com/pub/evernote-export4.dtd">
+<en-export export-date="20261117T090000Z" application="Evernote" version="10.105.4">
+<note><title></title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note><div>Passport number: <en-crypt hint="pet name" cipher="AES" length="128">RU5DMHN5bnRoZXRpYw==</en-crypt></div><div><img src="https://example.com/map.png"/></div><en-media hash="92a6266c79dda1435a7dfba415ae0353" type="image/heic"/><div>Hotel booked</div></en-note>]]></content><created>20180601T080000Z</created><updated>20180602T080000Z</updated><note-attributes><latitude>55.6761</latitude><longitude>12.5683</longitude><place-name>Synthetic City</place-name></note-attributes><resource><data encoding="base64">
+AAAAGGZ0eXBoZWljc3ludGhldGljIGhlaWMgYnl0ZXM=
+</data><mime>image/heic</mime><resource-attributes><file-name>IMG_0001.heic</file-name></resource-attributes></resource></note>
+<note><title>Packing list</title><content><![CDATA[<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
+<en-note/>]]></content><created>20180603T080000Z</created><updated>20180603T080000Z</updated></note>
+</en-export>

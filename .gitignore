@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# DATA SAFETY: this repository is public.
+# Real Evernote exports, note content, reports, logs and credentials must
+# never be committed. Only synthetic test fixtures are allowed.
+# ---------------------------------------------------------------------------
+*.enex
+!tests/EverNote2OneNote.Tests/Fixtures/**/*.enex
+*.enml
+reports/
+inspect-*/
+runs/
+*.csv
+*.log
+
+# Credentials and local configuration
+.env
+*.local.json
+*.pfx
+*.p12
+*token*cache*
+
+# Build output and IDE files
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+TestResults/
+*.trx
