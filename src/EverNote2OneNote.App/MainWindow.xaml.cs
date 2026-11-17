@@ -13,7 +13,7 @@ namespace EverNote2OneNote.App;
 public partial class MainWindow : Window
 {
     private readonly bool _quiet;
-    private readonly HashSet<(string File, int Note)> _migrated = [];
+    private readonly HashSet<string> _confirmedNotebooks = new(StringComparer.OrdinalIgnoreCase);
     private bool _busy;
     private string? _reportDirectory;
 
@@ -72,14 +72,8 @@ public partial class MainWindow : Window
         {
             return;
         }
-        var key = (row.Summary.File.FullPath, row.Summary.Index);
-        if (_migrated.Contains(key) &&
-            MessageBox.Show(this,
-                $"\"{row.Title}\" has already been migrated in this session.\n\nMigrate it again? This creates another new test notebook.",
-                "EverNote2OneNote", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
-        {
-            return;
-        }
+        var destination = DestinationBox.Text.Trim();
+        bool exportBackup = ExportBackupBox.IsChecked == true;
 
         SetBusy(true); // also disables the button, so repeated clicks cannot start a second migration
         try
@@ -91,18 +85,40 @@ public partial class MainWindow : Window
                     StatusText.Text = status;
                 }
             });
+
+            // 1. Look at the destination first (read-only) and confirm before writing into anything that exists.
+            StatusText.Text = "Checking the destination notebook in OneNote...";
+            var root = LocalMigrator.DefaultRoot();
+            var plan = await Task.Run(() =>
+            {
+                using var oneNote = OneNoteCom.Connect();
+                return LocalMigrator.PlanDestination(oneNote, destination, row.Summary, root, LocalMigrator.OneDriveFolders());
+            });
+            DestinationStatus.Text = plan.Describe();
+            if (plan.Problem is not null)
+            {
+                ShowError(plan.Problem, null);
+                return;
+            }
+            if (!ConfirmDestination(plan, row.Title))
+            {
+                StatusText.Text = "Migration cancelled; nothing was written.";
+                return;
+            }
+
+            // 2. Migrate into the confirmed destination.
             var result = await Task.Run(() =>
             {
                 ((IProgress<string>)progress).Report("Connecting to the OneNote desktop app...");
                 using var oneNote = OneNoteCom.Connect();
-                return LocalMigrator.Migrate(row.Summary, oneNote, LocalMigrator.DefaultRoot(), LocalMigrator.OneDriveFolders(), progress);
+                return LocalMigrator.Migrate(row.Summary, oneNote, plan, root, exportBackup, progress);
             });
             if (result.PageCreated)
             {
-                _migrated.Add(key);
+                DestinationStatus.Text = $"Notebook exists; section \"{result.Section}\" exists.";
             }
             StatusText.Text = result.PageCreated
-                ? $"Migrated \"{row.Title}\" to the OneNote notebook \"{result.NotebookName}\"."
+                ? $"Migrated \"{row.Title}\" to OneNote: {result.NotebookName} > {result.Section}."
                 : $"\"{row.Title}\" was not migrated.";
             new MigrationResultWindow(result, ShowInOneNote) { Owner = this }.ShowDialog();
         }
@@ -117,6 +133,50 @@ public partial class MainWindow : Window
         finally
         {
             SetBusy(false);
+        }
+    }
+
+    /// <summary>
+    /// Asks before writing into an existing notebook (once per notebook per session) and, always, before adding a page
+    /// whose title already exists in the section. A new notebook needs no confirmation.
+    /// </summary>
+    private bool ConfirmDestination(DestinationPlan plan, string title)
+    {
+        bool askNotebook = plan.NotebookExists && !_confirmedNotebooks.Contains(plan.NotebookName);
+        if (!askNotebook && plan.PagesWithSameTitle == 0)
+        {
+            return true;
+        }
+        var text = new System.Text.StringBuilder();
+        text.Append($"Destination notebook: \"{plan.NotebookName}\" - ALREADY EXISTS");
+        text.Append(plan.NotebookId is null ? " (created earlier by this app; it will be reopened)" : " (open in OneNote)");
+        if (plan.NotebookLocation is not null)
+        {
+            text.Append($"\nLocation: {plan.NotebookLocation}");
+        }
+        text.Append(plan.SectionExists
+            ? $"\nSection: \"{plan.SectionName}\" - already exists ({plan.SectionPages} page(s))"
+            : $"\nSection: \"{plan.SectionName}\" - will be created");
+        if (plan.PagesWithSameTitle > 0)
+        {
+            text.Append($"\n\n{plan.PagesWithSameTitle} page(s) in this section already have the title \"{title}\". " +
+                        "Continuing adds another page with the same title.");
+        }
+        text.Append("\n\nThe note will be added as a NEW page. Existing pages are not changed.\n\nContinue?");
+        if (MessageBox.Show(this, text.ToString(), "EverNote2OneNote - confirm destination",
+                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            return false;
+        }
+        _confirmedNotebooks.Add(plan.NotebookName);
+        return true;
+    }
+
+    private void Destination_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (DestinationStatus is not null)
+        {
+            DestinationStatus.Text = "Checked in OneNote when you migrate.";
         }
     }
 
@@ -284,6 +344,8 @@ public partial class MainWindow : Window
         OpenReportButton.IsEnabled = !busy && _reportDirectory is not null;
         MigrateButton.IsEnabled = !busy && NotesGrid.SelectedItem is NoteRow;
         CheckOneNoteButton.IsEnabled = !busy;
+        DestinationBox.IsEnabled = !busy;
+        ExportBackupBox.IsEnabled = !busy;
         Mouse.OverrideCursor = busy ? Cursors.AppStarting : null;
         if (!busy)
         {

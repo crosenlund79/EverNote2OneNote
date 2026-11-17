@@ -31,17 +31,18 @@ the full extracted text of your notes. Keep it private.
 
 Pilot 2: migrate one note into the OneNote desktop app
   Requires the OneNote desktop app (Microsoft 365 / Office) on this PC. No sign-in,
-  no cloud service, nothing is uploaded.
+  no cloud service.
   1. Inspect your export, open the "Notes" tab and select one note.
-  2. Click "Migrate Selected Note". OneNote may open in the background.
-  3. A NEW local notebook "EverNote2OneNote Test <date time>" is created with one section and one
-     page. Existing notebooks and pages are never changed.
-  4. The page is read back from OneNote and compared with the original text, and the notebook is
-     exported as a .onepkg file (never overwriting an existing file).
-  5. The result window shows text differences, attachment results, the .onepkg location, and
+  2. Check "Destination OneNote notebook" (default: Evernote Import). If a notebook with that
+     name is open in OneNote it is used; otherwise a new local notebook is created
+     (%LOCALAPPDATA%\EverNote2OneNote\OneNote\Notebooks\, not synced by OneDrive).
+  3. Click "Migrate Selected Note". For an existing notebook, or if a page with the same title
+     already exists, the app shows what exists and asks first. The note is always added as a
+     NEW page in the section named after its Evernote notebook; existing pages are never changed.
+  4. The page is read back and compared with the original text. With "Also export a .onepkg
+     backup" checked, the notebook is also exported (optional; never overwrites a file).
+  5. The result window shows text differences, attachment results, the backup location, and
      buttons "Show Page in OneNote" and "Open Export Folder".
-  Notebooks and exports: %LOCALAPPDATA%\EverNote2OneNote\OneNote\ (not synced by OneDrive).
-  When done, close the test notebook in OneNote (right-click it > Close This Notebook).
 
 If the migration fails with a OneNote/COM error (for example 0x8002801D)
   Click "Check OneNote Connection" (read-only). It analyses OneNote's automation and type library

@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using EverNote2OneNote.OneNote;
 using Microsoft.Win32;
 using ComTypes = System.Runtime.InteropServices.ComTypes;
 
@@ -56,6 +57,21 @@ internal static class OneNoteDiagnostics
                 r.Info($"Office (Click-to-Run): {c2r.GetValue("Platform")} version {c2r.GetValue("VersionToReport")}");
             }
         }
+
+        // 0. The connection this app actually uses: typed IApplication calls (read-only list of open notebooks).
+        bool activeWorks = false;
+        try
+        {
+            using var com = OneNoteCom.Connect();
+            int open = OneNoteHierarchy.Children(com.GetHierarchyXml("", HierarchyScope.Notebooks), "Notebook").Count;
+            r.Ok($"ACTIVE CONNECTION WORKS: typed IApplication interface (used for migration); OneNote lists {open} open notebook(s)");
+            activeWorks = true;
+        }
+        catch (OneNoteDesktopException ex)
+        {
+            r.Fail($"Active connection (typed IApplication interface, used for migration) failed: {ex.Message}");
+        }
+        r.Info("The lines below are details for troubleshooting. \"Legacy\" lines concern late-bound (by-name) calls, which this app does not use.");
 
         // 1. Class registration.
         var clsid = Default(Registry.ClassesRoot, $@"{ProgId}\CLSID");
@@ -154,29 +170,29 @@ internal static class OneNoteDiagnostics
             // 4a. Late-bound path (what the migration uses today): OneNote resolves names from its own type library.
             var dispatch = (IDispatchProbe)app!;
             int hrCount = dispatch.GetTypeInfoCount(out var count);
-            r.Line(hrCount == 0 ? "OK  " : "FAIL", hrCount == 0 ? $"OneNote reports {count} type description(s)" : $"OneNote type description count: {Hr(hrCount)}");
+            r.Info(hrCount == 0 ? $"Legacy: OneNote reports {count} type description(s)" : $"Legacy: OneNote type description count: {Hr(hrCount)}");
             int hrInfo = dispatch.GetTypeInfo(0, UserDefaultLocale, out var info);
             if (hrInfo == 0)
             {
                 Marshal.Release(info);
-                r.Ok("OneNote can load its own type library (for late-bound calls)");
+                r.Info("Legacy: OneNote can load its own type library for late-bound calls");
             }
             else
             {
                 errors.Add(hrInfo);
-                r.Fail($"OneNote cannot load its own type library (for late-bound calls): {Hr(hrInfo)}");
+                r.Info($"Legacy (not used by this app): OneNote cannot load its own type library for late-bound calls: {Hr(hrInfo)}");
             }
             var none = Guid.Empty;
             var ids = new int[1];
             int hrNames = dispatch.GetIDsOfNames(ref none, ["GetHierarchy"], 1, UserDefaultLocale, ids);
             if (hrNames == 0)
             {
-                r.Ok($"OneNote resolves method names (GetHierarchy = {ids[0]})");
+                r.Info($"Legacy: OneNote resolves method names (GetHierarchy = {ids[0]})");
             }
             else
             {
                 errors.Add(hrNames);
-                r.Fail($"OneNote cannot resolve method names (needed for late-bound calls): {Hr(hrNames)}");
+                r.Info($"Legacy (not used by this app): OneNote cannot resolve method names for late-bound calls: {Hr(hrNames)}");
             }
             try
             {
@@ -184,14 +200,14 @@ internal static class OneNoteDiagnostics
                 var modifiers = new ParameterModifier(3);
                 modifiers[2] = true;
                 app!.GetType().InvokeMember("GetHierarchy", BindingFlags.InvokeMethod, null, app, args, [modifiers], null, null);
-                r.Ok($"Late-bound read-only call works: OneNote lists {CountNotebooks((string)args[2]!)} open notebook(s)");
+                r.Info($"Legacy: late-bound read-only call works: OneNote lists {CountNotebooks((string)args[2]!)} open notebook(s)");
                 lateBoundWorks = true;
             }
             catch (Exception ex) when ((ex as TargetInvocationException)?.InnerException is COMException || ex is COMException)
             {
                 var com = (ex as COMException) ?? (COMException)ex.InnerException!;
                 errors.Add(com.HResult);
-                r.Fail($"Late-bound read-only call GetHierarchy failed: {Hr(com.HResult)}");
+                r.Info($"Legacy (not used by this app): late-bound read-only call GetHierarchy failed: {Hr(com.HResult)}");
             }
 
             // 4b. Typed (vtable) path: no name lookup in OneNote; calls are marshaled using the interface's registered type library.
@@ -208,7 +224,14 @@ internal static class OneNoteDiagnostics
             }
         }
 
-        // 5. Conclusion, from the evidence above.
+        // 5. Conclusion, from the evidence above. What matters is the connection the migration uses.
+        if (activeWorks)
+        {
+            return r.Conclude(lateBoundWorks
+                ? "The OneNote connection works."
+                : "The OneNote connection used by this app works (typed IApplication interface). Late-bound (by-name) calls fail on this PC, " +
+                  "but this app does not use them, so nothing needs to be repaired.");
+        }
         if (lateBoundWorks)
         {
             return r.Conclude("The OneNote connection works. If a migration still fails, send this report together with the error message.");

@@ -24,6 +24,13 @@ internal sealed class OneNoteCom : IOneNoteDesktop, IDisposable
     // IApplication methods as vtable calls. Parameter kinds (checked against the type library before every call):
     // S = BSTR in, O = BSTR* out, I = 32-bit integer or enumeration, D = DATE, B = VARIANT_BOOL.
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetHierarchyFn(IntPtr self, [MarshalAs(UnmanagedType.BStr)] string startNodeId, int scope,
+        [MarshalAs(UnmanagedType.BStr)] out string xml, int schema); // SIOI
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int SyncHierarchyFn(IntPtr self, [MarshalAs(UnmanagedType.BStr)] string objectId); // S
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private delegate int OpenHierarchyFn(IntPtr self, [MarshalAs(UnmanagedType.BStr)] string path,
         [MarshalAs(UnmanagedType.BStr)] string relativeToObjectId, [MarshalAs(UnmanagedType.BStr)] out string objectId, int createFileType); // SSOI
 
@@ -119,6 +126,26 @@ internal sealed class OneNoteCom : IOneNoteDesktop, IDisposable
         {
             Marshal.Release(unknown);
             Marshal.FinalReleaseComObject(app);
+        }
+    }
+
+    public string GetHierarchyXml(string startNodeId, HierarchyScope scope)
+    {
+        var scopeValue = Constant(scope switch
+        {
+            HierarchyScope.Notebooks => "hsNotebooks",
+            HierarchyScope.Sections => "hsSections",
+            _ => "hsPages",
+        });
+        Check("GetHierarchy", Method<GetHierarchyFn>("GetHierarchy", "SIOI")(_application, startNodeId, scopeValue, out var xml, Constant("xsCurrent")));
+        return xml;
+    }
+
+    public void SyncHierarchy(string objectId)
+    {
+        if (_methods.ContainsKey("SyncHierarchy"))
+        {
+            Check("SyncHierarchy", Method<SyncHierarchyFn>("SyncHierarchy", "S")(_application, objectId));
         }
     }
 

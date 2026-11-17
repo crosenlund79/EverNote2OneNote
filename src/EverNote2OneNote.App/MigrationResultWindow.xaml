@@ -15,7 +15,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="OneNote package (.onepkg):" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBlock Text="Backup (.onepkg):" VerticalAlignment="Center" Margin="0,0,8,0" />
             <TextBox x:Name="ExportPathBox" Grid.Column="1" IsReadOnly="True" Padding="3" />
         </Grid>
         <TextBlock x:Name="ExportStatus" DockPanel.Dock="Top" Margin="0,4,0,0" TextWrapping="Wrap" />

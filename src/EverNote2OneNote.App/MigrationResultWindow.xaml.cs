@@ -31,10 +31,9 @@ public partial class MigrationResultWindow : Window
             !result.PageCreated ? ("#FDE7E9", "#A4262C", "The note was NOT migrated. " + result.Error)
             : result.Error is not null ? ("#FDE7E9", "#A4262C", "The page was created, but the migration did not finish. " + result.Error)
             : !textOk ? ("#FDE7E9", "#A4262C", "Differences found: the OneNote page does not match the original note text. See below.")
-            : result.ExportProblem is not null ? ("#FFF4CE", "#7A4D00", "All text verified, but the .onepkg export did not succeed. See below.")
-            : !attachmentsOk ? ("#FFF4CE", "#7A4D00", "All text verified and exported. Some attachments were not transferred or could not be confirmed.")
-            : result.Notices.Count > 0 ? ("#FFF4CE", "#7A4D00", "All text and attachments verified and exported. Some content needs attention - see Notes.")
-            : ("#DFF6DD", "#0E700E", "All text verified: the OneNote page contains the complete note text in the original order, all attachments were found, and the notebook was exported.");
+            : !attachmentsOk ? ("#FFF4CE", "#7A4D00", "All text verified. Some attachments were not transferred or could not be confirmed - see Attachments.")
+            : result.Notices.Count > 0 ? ("#FFF4CE", "#7A4D00", "All text and attachments verified. Some content needs attention - see Notes.")
+            : ("#DFF6DD", "#0E700E", "All text verified: the OneNote page contains the complete note text in the original order, and all attachments were found.");
         Banner.Background = Brush(background);
         BannerText.Foreground = Brush(foreground);
         BannerText.Text = message;
@@ -42,7 +41,12 @@ public partial class MigrationResultWindow : Window
         var details = new List<string>();
         if (result.NotebookName is not null)
         {
-            details.Add($"OneNote notebook: {result.NotebookName} > {result.Section ?? "-"}");
+            details.Add($"OneNote: {result.NotebookName} ({(result.NotebookExisted ? "existing" : "new")} notebook) > " +
+                        $"{result.Section ?? "-"} ({(result.SectionExisted ? "existing" : "new")} section)");
+        }
+        if (result.NotebookLocation is not null)
+        {
+            details.Add($"Notebook location: {result.NotebookLocation}");
         }
         if (result.Method is not null)
         {
@@ -54,12 +58,14 @@ public partial class MigrationResultWindow : Window
         }
         DetailsText.Text = string.Join("    |    ", details);
 
-        bool exported = result.PageCreated && result.ExportProblem is null && result.ExportPath is not null && File.Exists(result.ExportPath);
-        ExportPathBox.Text = exported ? result.ExportPath : "(not exported)";
+        bool exported = result.ExportPath is not null && File.Exists(result.ExportPath);
+        ExportPathBox.Text = exported ? result.ExportPath : "(no backup)";
         ExportStatus.Text = exported
-            ? $"Exported with OneNote's own publish function ({Format.Bytes(new FileInfo(result.ExportPath!).Length)}). It is stored locally and not uploaded anywhere."
-            : result.ExportProblem ?? "The notebook was not exported.";
-        ExportStatus.Foreground = Brush(exported ? "#555555" : "#A4262C");
+            ? $"Optional backup: exported with OneNote's own publish function and checked ({Format.Bytes(new FileInfo(result.ExportPath!).Length)}). Stored locally, not uploaded."
+            : !result.ExportRequested ? "Optional backup: not requested."
+            : !result.PageCreated ? "Optional backup: not attempted, because the page was not created."
+            : "Optional backup FAILED (the migrated page is not affected): " + (result.ExportProblem ?? "unknown reason");
+        ExportStatus.Foreground = Brush(exported || !result.ExportRequested ? "#555555" : "#A4262C");
 
         TextSummary.Text = text is null ? "The page was not read back, so the text was not verified."
             : text.TooManyDifferences ? $"The texts differ too much to list individual differences ({Format.Count(text.OriginalCharacters)} characters in the original, {Format.Count(text.PageCharacters)} on the page)."

@@ -49,21 +49,25 @@ Requires the **OneNote desktop app** (Microsoft 365 / Office) on the same PC. No
 Azure, app registration or sign-in is used: the app talks to OneNote through its documented local automation
 API (COM).
 
-In the Windows app: inspect your export, open the **Notes** tab, select one note, and click **Migrate Selected Note**.
+In the Windows app: inspect your export, open the **Notes** tab, select one note, check the **Destination OneNote
+notebook** (default `Evernote Import`), and click **Migrate Selected Note**.
 
-- A new, uniquely named **local** notebook is created for every migration (`EverNote2OneNote Test <date time>`),
-  with one section named after the Evernote notebook and one page. Existing notebooks and pages are never changed.
-  The `.enex` files are only read.
-- The page gets the note's title, its full text (paragraphs, headings, bullet and numbered lists, web links,
-  bold/italic), images, file attachments, a small header line with the Evernote notebook, dates and tags, and the
-  note's creation date.
+- **Destination:** if a notebook with that name is open in OneNote, it is used; otherwise a new local notebook with
+  that name is created in `%LOCALAPPDATA%\EverNote2OneNote\OneNote\Notebooks\` (not synced by OneDrive). Each Evernote
+  notebook becomes a section; an existing section with the same name is reused. The note is always added as a
+  **new page**: existing pages are never changed, overwritten or deleted. Before writing into an existing notebook
+  (once per notebook per session), and whenever a page with the same title already exists in the section, the app
+  shows what exists and asks for confirmation. The `.enex` files are only read.
+- The page gets the note's title, its full text (paragraphs, headings, bullet and numbered lists, simple tables,
+  web links, bold/italic), images, file attachments, a small header line with the Evernote notebook, dates and tags,
+  and the note's creation date.
 - **Verification:** the page is read back through the OneNote API and its text is compared with the original
   (from the inspection), ignoring spaces and line breaks. Every character must be present, in order, exactly once.
   Missing, extra, moved and duplicated text is listed; attachments are checked separately; nothing is repaired.
-- **Export:** the test notebook is exported with OneNote's own *Publish* function as a OneNote package (`.onepkg`).
-  Existing files are never overwritten.
-- Notebooks and exports are kept in `%LOCALAPPDATA%\EverNote2OneNote\OneNote\` (`Notebooks\`, `Exports\`),
-  a folder OneDrive does not sync, so nothing is uploaded. The app refuses to work inside a OneDrive folder.
+- **Optional backup:** with *Also export a .onepkg backup* checked, the destination notebook is exported with
+  OneNote's own *Publish* function to `%LOCALAPPDATA%\EverNote2OneNote\OneNote\Exports\`. The app waits until OneNote
+  has finished writing the package and checks that it is valid. Existing files are never overwritten. A failed
+  backup is reported but does not affect the migrated page.
 - If OneNote rejects the full page, the app writes it again on a fresh page as plain text only and reports that
   attachments were not transferred. If the OneNote automation API is not available, it stops with an explanation.
 
@@ -77,14 +81,13 @@ conclusion based on that evidence; **Copy to Clipboard** lets you send it. The a
 ### Pilot 2 limitations
 
 - Needs the OneNote desktop app from Microsoft 365 / Office. *OneNote for Windows 10* has no automation API.
-- Tables become lines of text with cells separated by tabs. Checkboxes become `[x]` / `[ ]` text so the text can be
-  verified exactly. Fonts, colours and sizes are dropped.
+- Simple tables keep their rows and cells (merged cells are split; tables nested in tables become text in their cell).
+  Checkboxes become `[x]` / `[ ]` text so the text can be verified exactly. Fonts, colours and sizes are dropped.
 - Links to other Evernote notes become plain text. Encrypted text is replaced by a visible marker. Both are reported.
 - Images are checked by count, because OneNote stores them without file names. Files are checked by name.
   Attachments over 100 MB are not transferred and are reported.
-- The test notebook stays open in OneNote after the migration so you can look at it. Close it in OneNote
-  (right-click the notebook, *Close This Notebook*) when you are done; its files stay in the folder above.
-- The repeat-migration warning only lasts while the app is open. Each migration creates its own new notebook.
+- Only notebooks that are open in OneNote are recognised as existing; a closed notebook with the same name elsewhere
+  is not found (a new local one would be created).
 
 ## Command-line tool (for developers)
 

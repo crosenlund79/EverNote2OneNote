@@ -113,7 +113,11 @@ public static class PageXmlBuilder
                     ? new XElement(One + "Bullet", new XAttribute("bullet", 2))
                     : new XElement(One + "Number", new XAttribute("numberSequence", 0), new XAttribute("numberFormat", "##."))));
             }
-            if (block.MediaIndex >= 0)
+            if (block.Table is not null)
+            {
+                oe.Add(TableElement(block.Table, writer));
+            }
+            else if (block.MediaIndex >= 0)
             {
                 oe.Add(Media(block.MediaIndex, note, data, saveFile, result, writer));
             }
@@ -162,6 +166,32 @@ public static class PageXmlBuilder
         return new PageContent(title.Trim(), text, images, files);
     }
 
+    /// <summary>A OneNote table: one column per cell of the widest row; shorter rows are padded with empty cells.</summary>
+    private static XElement TableElement(TableData table, BlockWriter writer)
+    {
+        var rows = table.Rows.Where(r => r.Count > 0).ToList();
+        int columns = rows.Max(r => r.Count);
+        var widths = Enumerable.Range(0, columns)
+            .Select(c => Math.Clamp(rows.Max(r => c < r.Count ? r[c].Sum(p => RawText.FromMarkup(p).Length) : 0) * 6.0, 60, 300));
+        var element = new XElement(One + "Table",
+            new XAttribute("bordersVisible", "true"),
+            new XElement(One + "Columns", widths.Select((width, index) => new XElement(One + "Column",
+                new XAttribute("index", index),
+                new XAttribute("width", width.ToString("0.##", CultureInfo.InvariantCulture))))));
+        foreach (var row in rows)
+        {
+            var rowElement = new XElement(One + "Row");
+            for (int c = 0; c < columns; c++)
+            {
+                var paragraphs = c < row.Count && row[c].Count > 0 ? row[c] : [""];
+                rowElement.Add(new XElement(One + "Cell", new XElement(One + "OEChildren",
+                    paragraphs.Select(p => new XElement(One + "OE", new XElement(One + "T", new XCData(XmlSafe(p, writer))))))));
+            }
+            element.Add(rowElement);
+        }
+        return element;
+    }
+
     private static XElement Children(XElement oe)
     {
         var children = oe.Element(One + "OEChildren");
@@ -180,7 +210,7 @@ public static class PageXmlBuilder
         var bytes = data[index];
         var mime = string.IsNullOrWhiteSpace(resource.Mime) ? "application/octet-stream" : resource.Mime.Trim();
         var fileName = string.IsNullOrWhiteSpace(resource.FileName) ? $"attachment-{index + 1}{Extension(mime)}" : resource.FileName.Trim();
-        var placement = writer.AtEnd.Contains(index) ? "End of page" : "In place";
+        var placement = writer.AtEnd.Contains(index) ? "End of page" : writer.AfterTable.Contains(index) ? "After table" : "In place";
 
         if (ImageTypes.Contains(mime))
         {
@@ -270,7 +300,39 @@ public static class PageXmlBuilder
     private enum ListKind { None, Bullet, Number }
 
     /// <summary>One OE element: a paragraph (inline HTML) or an attachment, at a list nesting level.</summary>
-    private sealed record Block(int Level, ListKind List, string? Html, int MediaIndex = -1);
+    private sealed record Block(int Level, ListKind List, string? Html, int MediaIndex = -1, TableData? Table = null);
+
+    /// <summary>A simple table: rows of cells, each cell a list of paragraphs (inline HTML).</summary>
+    private sealed class TableData
+    {
+        public List<List<List<string>>> Rows { get; } = [];
+
+        /// <summary>Attachments referenced inside the table; placed right after it.</summary>
+        public List<int> DeferredMedia { get; } = [];
+
+        public void NewRow() => Rows.Add([]);
+
+        public void NewCell()
+        {
+            if (Rows.Count == 0)
+            {
+                NewRow();
+            }
+            Rows[^1].Add([]);
+        }
+
+        public List<string> Cell
+        {
+            get
+            {
+                if (Rows.Count == 0 || Rows[^1].Count == 0)
+                {
+                    NewCell();
+                }
+                return Rows[^1][^1];
+            }
+        }
+    }
 
     /// <summary>Walks the ENML and produces blocks. Inline content is buffered until a block boundary.</summary>
     private sealed class BlockWriter(EnexNote note, IReadOnlyDictionary<int, byte[]> data, PageMode mode)
@@ -283,7 +345,10 @@ public static class PageXmlBuilder
         private bool _hasContent;
         private bool _pendingBullet;
         private int _preDepth;
-        private int _tables;
+        private int _flattenedTables;
+        private int _mergedCells;
+        private TableData? _table;
+        private int _tableDepth;
         private int _skippedLinks;
         private int _duplicateReferences;
 
@@ -291,6 +356,7 @@ public static class PageXmlBuilder
         public List<AddedText> Added { get; } = [];
         public List<string> Notices { get; } = [];
         public HashSet<int> AtEnd { get; } = [];
+        public HashSet<int> AfterTable { get; } = [];
         public int RemovedControlCharacters { get; set; }
 
         private bool Plain => mode == PageMode.TextOnly;
@@ -308,6 +374,8 @@ public static class PageXmlBuilder
             _hasContent = false;
             _pendingBullet = false;
             _preDepth = 0;
+            _table = null;
+            _tableDepth = 0;
         }
 
         public void Walk(string enml)
@@ -357,9 +425,13 @@ public static class PageXmlBuilder
             }
             Boundary();
 
-            if (_tables > 0)
+            if (_flattenedTables > 0)
             {
-                Notices.Add($"{_tables} table(s) were migrated as lines of text with cells separated by tabs (table layout is not kept).");
+                Notices.Add($"{_flattenedTables} table(s) were migrated as lines of text with cells separated by tabs (nested tables, or text-only mode).");
+            }
+            if (_mergedCells > 0)
+            {
+                Notices.Add($"{_mergedCells} merged table cell(s) were split, because the migrated table has one cell per position.");
             }
             if (_skippedLinks > 0)
             {
@@ -434,7 +506,31 @@ public static class PageXmlBuilder
                     return;
                 case "table":
                     Boundary();
-                    _tables++;
+                    _tableDepth++;
+                    if (_tableDepth == 1 && !Plain)
+                    {
+                        _table = new TableData();
+                    }
+                    else
+                    {
+                        _flattenedTables++; // nested table, or text-only mode: cells become tab-separated text
+                    }
+                    return;
+                case "tr" when _table is not null && _tableDepth == 1:
+                    Boundary();
+                    _table.NewRow();
+                    return;
+                case "td" or "th":
+                    if (int.TryParse(reader.GetAttribute("colspan"), out var colspan) && colspan > 1 ||
+                        int.TryParse(reader.GetAttribute("rowspan"), out var rowspan) && rowspan > 1)
+                    {
+                        _mergedCells++;
+                    }
+                    if (_table is not null && _tableDepth == 1)
+                    {
+                        Boundary();
+                        _table.NewCell();
+                    }
                     return;
                 case "pre" or "xmp":
                     Boundary();
@@ -484,7 +580,35 @@ public static class PageXmlBuilder
                     _pendingBullet = false;
                     return;
                 case "td" or "th":
-                    _inline.Append('\t');
+                    if (_table is not null && _tableDepth == 1)
+                    {
+                        Boundary();
+                    }
+                    else
+                    {
+                        _inline.Append('\t');
+                    }
+                    return;
+                case "table":
+                    Boundary();
+                    if (_tableDepth == 1 && _table is not null)
+                    {
+                        var table = _table;
+                        _table = null;
+                        if (table.Rows.Any(r => r.Count > 0))
+                        {
+                            Blocks.Add(new Block(_lists.Count, ListKind.None, null, -1, table));
+                        }
+                        foreach (var media in table.DeferredMedia)
+                        {
+                            AfterTable.Add(media);
+                            Blocks.Add(new Block(_lists.Count, ListKind.None, null, media));
+                        }
+                    }
+                    if (_tableDepth > 0)
+                    {
+                        _tableDepth--;
+                    }
                     return;
                 case "pre" or "xmp":
                     Boundary();
@@ -541,8 +665,16 @@ public static class PageXmlBuilder
         {
             if (_hasContent)
             {
-                var list = _pendingBullet && !Plain ? _lists.Peek() : ListKind.None;
-                Blocks.Add(new Block(Plain ? 0 : _lists.Count, list, _inline.ToString().TrimEnd('\t')));
+                var html = _inline.ToString().TrimEnd('\t');
+                if (_table is not null)
+                {
+                    _table.Cell.Add(html); // inside a table: a paragraph of the current cell
+                }
+                else
+                {
+                    var list = _pendingBullet && !Plain ? _lists.Peek() : ListKind.None;
+                    Blocks.Add(new Block(Plain ? 0 : _lists.Count, list, html));
+                }
                 _pendingBullet = false;
             }
             _inline.Clear();
@@ -567,6 +699,11 @@ public static class PageXmlBuilder
                 return; // not placed in text-only mode or without data; the caller reports it
             }
             Boundary();
+            if (_table is not null)
+            {
+                _table.DeferredMedia.Add(index); // OneNote cells hold text here; the attachment follows the table
+                return;
+            }
             Blocks.Add(new Block(_lists.Count, ListKind.None, null, index));
         }
 
