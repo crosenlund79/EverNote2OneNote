@@ -1,0 +1,49 @@
+name: Windows build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build and test
+        run: dotnet test -c Release
+
+      - name: Publish self-contained Windows app (win-x64)
+        run: dotnet publish src/EverNote2OneNote.App/EverNote2OneNote.App.csproj -c Release -r win-x64 -o publish
+
+      - name: Self-test the published app on synthetic fixtures
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'self-test'
+          $fixtures = Join-Path $PWD 'tests\EverNote2OneNote.Tests\Fixtures'
+          $p = Start-Process -FilePath 'publish\EverNote2OneNote.exe' -ArgumentList @('--self-test', "`"$fixtures`"", "`"$out`"") -PassThru
+          $null = $p.Handle  # keep the handle so the exit code is available
+          if (-not $p.WaitForExit(180000)) { $p.Kill(); throw 'Self-test timed out' }
+          $log = Get-Content (Join-Path $out 'self-test.txt') -Raw
+          Write-Host $log
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+          if ($log -notmatch 'notes=9 notebooks=4 attachments=4 ') { throw 'Self-test counts are not as expected' }
+
+      - name: Add instructions
+        shell: pwsh
+        run: Copy-Item src/EverNote2OneNote.App/README.txt publish/README.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: EverNote2OneNote-win-x64
+          path: publish/
+          if-no-files-found: error

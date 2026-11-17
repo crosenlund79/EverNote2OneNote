@@ -12,6 +12,20 @@ public static class ReportWriter
     private static readonly UTF8Encoding Utf8 = new(false);
     private static readonly UTF8Encoding Utf8WithBom = new(true); // so Excel opens CSV files as UTF-8
 
+    /// <summary>%LOCALAPPDATA%\EverNote2OneNote\reports\inspect-&lt;time&gt; (never inside the repository or the source folder).</summary>
+    public static string DefaultDirectory() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "EverNote2OneNote", "reports",
+        "inspect-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+
+    /// <summary>True if <paramref name="path"/> is <paramref name="folder"/> or lies inside it.</summary>
+    public static bool IsInside(string path, string folder)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var normalizedFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar;
+        return (Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar).StartsWith(normalizedFolder, comparison);
+    }
+
     public static void Write(InspectionResult result, string summary, string directory, bool dumpText)
     {
         Directory.CreateDirectory(directory);

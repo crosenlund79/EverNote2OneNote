@@ -14,6 +14,9 @@ public enum TextStatus
     NotRecovered,
 }
 
+/// <summary>Progress of <see cref="Inspector.Run"/>; <see cref="CurrentFile"/> is null once all files are read.</summary>
+public sealed record InspectionProgress(int FilesCompleted, int FileCount, string? CurrentFile);
+
 public sealed class InspectionResult
 {
     public required string SourcePath { get; init; }

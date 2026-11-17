@@ -31,6 +31,7 @@ ENEX files (read-only)
   → EnmlText       note body → ordered plain text (+ media references, checkboxes, encrypted blocks)
   → Inspector      findings (Error / Warning / Info) per file and note
   → Summary / ReportWriter   console summary (counts only) + private local report
+  → Windows app / CLI        thin front ends over the same engine
   ... later pilots:
   → Converter      ENML → OneNote-safe HTML subset (text kept even where formatting is dropped)
   → OneNote client Microsoft Graph, delegated sign-in, throttling
@@ -44,6 +45,7 @@ ENEX files (read-only)
 | `src/EverNote2OneNote/Text` | `EnmlText` (XML walk with built-in HTML entity table, no DTD or network access), `RawText` (fallback: removes only recognised tags), `TextBuilder` |
 | `src/EverNote2OneNote/Inspection` | `Inspector`, finding catalogue (`IssueCodes`), `Summary`, `ReportWriter` |
 | `src/EverNote2OneNote.Cli` | `e2o inspect` |
+| `src/EverNote2OneNote.App` | WPF test application: choose folder → Inspect Archive → results and report folder. The inspection runs on a background thread with per-file progress. A hidden `--self-test` switch lets the Windows build pipeline run the published exe end to end. |
 
 ### How ENEX reading avoids data loss
 

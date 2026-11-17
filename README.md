@@ -10,80 +10,65 @@ See [docs/architecture.md](docs/architecture.md) for the design and decisions.
 
 | Milestone | Scope | Status |
 |---|---|---|
-| Pilot 1 | Read and inspect ENEX exports locally (read-only) | **Done** |
+| Pilot 1 | Read and inspect ENEX exports locally (read-only): Windows app and command line | **Done** |
 | Pilot 2 | Convert notes and upload to a OneNote test notebook | Not started |
 | Pilot 3 | Migration journal, resume, verification, report | Not started |
-| Pilot 4 | Simple WPF interface | Not started |
 
-## Pilot 1: inspect your Evernote export (Windows)
+## Try Pilot 1 on Windows (no installation)
 
-The inspector reads `.enex` files **without modifying them**, extracts the full text and metadata of
-every note, inventories attachments, and reports anything that could not be read reliably.
+The test application reads your `.enex` files **without modifying them**, checks every note and shows
+notebooks, notes, attachments, text extraction status, warnings and errors. Nothing is uploaded.
 
-### 1. Install the .NET 10 SDK
+1. **Export from Evernote:** export each notebook as ENEX (right-click the notebook → *Export notebook…* → `.enex`)
+   into one folder, e.g. `C:\EvernoteExport`. Keep the default file names, because they become the notebook names.
+2. **Download the app:** open
+   [Actions → Windows build](https://github.com/crosenlund79/EverNote2OneNote/actions/workflows/windows.yml)
+   (you must be signed in to GitHub), click the latest run with a green check mark, scroll down to
+   **Artifacts** and click **EverNote2OneNote-win-x64**. A zip file downloads.
+3. **Extract** the zip (right-click → *Extract All…*) and double-click **EverNote2OneNote.exe**.
+   It is self-contained, so .NET is not required.
+4. If Windows shows *"Windows protected your PC"*, click **More info → Run anyway**. The test build is not code-signed.
+5. Click **Browse…**, choose your export folder, then click **Inspect Archive**.
+6. Review the result. **Open Report Folder** shows the detailed report:
+   - `report.md`: every finding with note title and location
+   - `notes.csv`, `attachments.csv`: one row per note or attachment (open in Excel)
+   - `recovered\`: notes whose text had to be recovered from damaged markup, with the original markup
+   - `text\`: the full extracted text of every note, for spot checks
 
-```powershell
-winget install Microsoft.DotNet.SDK.10
-```
+   The report is saved in `%LOCALAPPDATA%\EverNote2OneNote\reports\` and contains personal data, so keep it private.
+   The **Summary (safe to share)** tab contains counts only.
 
-Or download it from <https://dotnet.microsoft.com/download/dotnet/10.0>. Open a new terminal afterwards.
+Findings are graded **Error** (could not be read reliably), **Warning** (read, but needs attention before
+migration, e.g. encrypted text) and **Info**.
 
-### 2. Export your notebooks from Evernote
+## Command-line tool (for developers)
 
-In Evernote, export each notebook as ENEX (right-click the notebook → *Export notebook…* → `.enex`).
-Save all files in one folder **outside this repository**, e.g. `C:\EvernoteExport`.
-Keep the default file names: each file name becomes the notebook (section) name.
-
-### 3. Get the code and run the tests
-
-```powershell
-git clone https://github.com/crosenlund79/EverNote2OneNote.git
-cd EverNote2OneNote
-dotnet test
-```
-
-### 4. Run the inspection
-
-```powershell
-dotnet run --project src\EverNote2OneNote.Cli -c Release -- inspect "C:\EvernoteExport"
-```
-
-Add your account's figures to compare the export against them:
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ```powershell
 dotnet run --project src\EverNote2OneNote.Cli -c Release -- inspect "C:\EvernoteExport" `
   --expect-notes <n> --expect-notebooks <n> --expect-attachments <n> --expect-size <e.g. 1.2GB>
 ```
 
-Other options: `--out <folder>` (report location) and `--dump-text` (also write every note's extracted text).
-
-### 5. Read the results
-
-- **Console summary:** counts only, with no titles, names or text, so it is safe to share.
-  Exit code `0` = no read errors, `1` = errors found, `2` = usage or fatal error.
-- **Detailed report** (default `%LOCALAPPDATA%\EverNote2OneNote\reports\inspect-<time>\`):
-  - `report.md`: summary, per-notebook table, every finding with note title and location
-  - `notes.csv` / `attachments.csv`: one row per note / attachment (opens in Excel)
-  - `recovered\`: notes whose text had to be recovered from damaged markup, with the original markup
-  - `text\`: full extracted text per notebook (only with `--dump-text`)
-
-  The detailed report contains personal data. Keep it private and never commit it.
-
-Findings are graded **Error** (could not be read reliably), **Warning** (read, but needs attention
-before migration, e.g. encrypted text) and **Info**. `report.md` explains every code.
+The console summary contains counts only. Other options: `--out <folder>`, `--dump-text`.
+Exit code `0` = no read errors, `1` = errors found, `2` = usage or fatal error.
 
 ## Development
-
-Requires the .NET 10 SDK. Everything except the future WPF app builds and tests on Windows, macOS and Linux.
 
 ```bash
 dotnet build
 dotnet test
+dotnet publish src/EverNote2OneNote.App -c Release -r win-x64 -o publish   # single self-contained .exe
 ```
+
+The library, CLI and tests build and run on Windows, macOS and Linux. The WPF app compiles everywhere but runs
+only on Windows. The [Windows build](.github/workflows/windows.yml) workflow builds and tests on Windows,
+publishes the app, runs it against the synthetic fixtures, and uploads the downloadable artifact.
 
 | Path | Purpose |
 |---|---|
-| `src/EverNote2OneNote` | Core library: ENEX reading, text extraction, inspection, reports |
+| `src/EverNote2OneNote` | Core library (`EverNote2OneNote.Core.dll`): ENEX reading, text extraction, inspection, reports |
+| `src/EverNote2OneNote.App` | Windows test application (`EverNote2OneNote.exe`, WPF) |
 | `src/EverNote2OneNote.Cli` | `e2o` command-line tool |
 | `tests/EverNote2OneNote.Tests` | xUnit tests and synthetic ENEX fixtures |
 

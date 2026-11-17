@@ -91,8 +91,8 @@ public static class Cli
                 return UsageError;
             }
 
-            var reportDirectory = Path.GetFullPath(outDirectory ?? DefaultReportDirectory());
-            if (Directory.Exists(sourcePath) && IsInside(reportDirectory, sourcePath))
+            var reportDirectory = Path.GetFullPath(outDirectory ?? ReportWriter.DefaultDirectory());
+            if (Directory.Exists(sourcePath) && ReportWriter.IsInside(reportDirectory, sourcePath))
             {
                 error.WriteLine("The report folder must be outside the source folder, so the source folder is left untouched.");
                 return UsageError;
@@ -112,18 +112,6 @@ public static class Cli
             error.WriteLine($"Error: {ex.Message}");
             return UsageError;
         }
-    }
-
-    private static string DefaultReportDirectory() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "EverNote2OneNote", "reports",
-        "inspect-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-
-    private static bool IsInside(string path, string folder)
-    {
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var normalizedFolder = Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar;
-        return (Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar).StartsWith(normalizedFolder, comparison);
     }
 
     private static string Value(string[] args, ref int i) =>

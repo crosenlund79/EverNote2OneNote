@@ -1,4 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The Windows app is EverNote2OneNote.exe, so the library gets a distinct assembly name. -->
+    <AssemblyName>EverNote2OneNote.Core</AssemblyName>
+    <RootNamespace>EverNote2OneNote</RootNamespace>
+  </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="EverNote2OneNote.Tests" />

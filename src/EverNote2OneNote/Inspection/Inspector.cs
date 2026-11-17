@@ -37,16 +37,21 @@ public static class Inspector
             .ToList();
     }
 
-    public static InspectionResult Run(string path)
+    /// <param name="path">An .enex file or a folder containing .enex files.</param>
+    /// <param name="progress">Optional: notified before each file and once when all files are read.</param>
+    public static InspectionResult Run(string path, IProgress<InspectionProgress>? progress = null)
     {
         var full = System.IO.Path.GetFullPath(path);
         var baseDirectory = File.Exists(full) ? System.IO.Path.GetDirectoryName(full)! : full;
         var result = new InspectionResult { SourcePath = full };
 
-        foreach (var file in FindFiles(full))
+        var files = FindFiles(full);
+        for (int i = 0; i < files.Count; i++)
         {
-            InspectFile(file, baseDirectory, result);
+            progress?.Report(new InspectionProgress(i, files.Count, System.IO.Path.GetRelativePath(baseDirectory, files[i])));
+            InspectFile(files[i], baseDirectory, result);
         }
+        progress?.Report(new InspectionProgress(files.Count, files.Count, null));
 
         foreach (var group in result.Files.GroupBy(f => f.Notebook, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
         {
