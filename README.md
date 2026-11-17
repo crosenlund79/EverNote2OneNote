@@ -67,6 +67,24 @@ In the Windows app: inspect your export, open the **Notes** tab, select one note
 - If OneNote rejects the full page, the app writes it again on a fresh page as plain text only and reports that
   attachments were not transferred. If the OneNote automation API is not available, it stops with an explanation.
 
+### If the migration fails with a OneNote/COM error
+
+Click **Check OneNote Connection**. It is read-only: it checks OneNote's automation registration, loads its type
+library without registering anything, and asks OneNote for the list of open notebooks. Its report ends with a
+conclusion and, if needed, repair steps. Copy the report if you need help.
+
+Error `0x8002801D` (`TYPE_E_LIBNOTREGISTERED`) means OneNote's type library is missing or registered incorrectly.
+This is an Office installation problem; every program that automates OneNote depends on that registration.
+To repair it (the app never changes the registry itself):
+
+1. Close OneNote and this app.
+2. Windows **Settings → Apps → Installed apps** → *Microsoft 365* (or *Microsoft Office*) → **… → Modify** →
+   **Quick Repair** → **Repair**.
+3. Open OneNote once normally, close it, and run **Check OneNote Connection** again.
+4. If it still fails, repeat step 2 with **Online Repair** (reinstalls Office; notebooks are not affected).
+5. Only if the check still lists a **BROKEN** type library entry under `HKEY_CURRENT_USER`: back up (export) exactly
+   that key in Registry Editor and delete it, then check again.
+
 ### Pilot 2 limitations
 
 - Needs the OneNote desktop app from Microsoft 365 / Office. *OneNote for Windows 10* has no automation API.

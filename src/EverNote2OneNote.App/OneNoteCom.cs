@@ -103,6 +103,9 @@ internal sealed class OneNoteCom : IOneNoteDesktop, IDisposable
         0x80042018 => "the folder does not exist",
         0x8004201A => "the file already exists",
         0x8004201C => "this action is disabled by policy",
+        0x8002801D => "OneNote's type library is not registered correctly on this PC (TYPE_E_LIBNOTREGISTERED). " +
+                      "This is an Office installation problem; click \"Check OneNote Connection\" for details and repair steps",
+        0x80080005 => "OneNote did not start for automation (if this app or OneNote runs \"as administrator\", run both normally)",
         _ => "OneNote reported an error",
     };
 }

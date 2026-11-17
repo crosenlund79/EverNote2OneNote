@@ -39,6 +39,7 @@ jobs:
           if ($log -notmatch 'notes=9 notebooks=4 attachments=4 ') { throw 'Self-test counts are not as expected' }
           if ($log -notmatch 'pan\.png:shown' -or $log -notmatch 'photo\.jpg:error') { throw 'Image preview did not behave as expected' }
           if ($log -notmatch 'onenote=(available|unavailable-explained)') { throw 'Missing OneNote desktop API was not explained' }
+          if ($log -notmatch 'diagnostics=ok') { throw 'OneNote connection check did not complete' }
 
       - name: Add instructions
         shell: pwsh

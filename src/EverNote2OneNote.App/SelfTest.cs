@@ -58,6 +58,9 @@ internal static class SelfTest
                 {
                     oneNote = ex.Message.Contains("Nothing was created", StringComparison.Ordinal) ? "unavailable-explained" : "unavailable-unexplained";
                 }
+
+                // The read-only connection check must always produce a report with a conclusion.
+                var diagnostics = OneNoteDiagnostics.Run().Contains("Conclusion:", StringComparison.Ordinal) ? "ok" : "incomplete";
                 // Preview every image attachment: valid images must show, damaged ones must be reported, not crash.
                 var previews = new List<string>();
                 foreach (var row in ((IEnumerable<AttachmentRow>)window.AttachmentsGrid.ItemsSource)
@@ -72,7 +75,7 @@ internal static class SelfTest
 
                 log = $"notes={result.Notes.Count} notebooks={result.Files.Count} attachments={result.Attachments.Count} " +
                       $"findings={result.Issues.Count} errors={result.CountIssues(Severity.Error)} " +
-                      $"report={reportWritten} displayed={displayed} previews={string.Join(",", previews)} onenote={oneNote}";
+                      $"report={reportWritten} displayed={displayed} previews={string.Join(",", previews)} onenote={oneNote} diagnostics={diagnostics}";
                 exitCode = reportWritten && displayed ? 0 : 1;
             }
             window.Close();

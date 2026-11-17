@@ -126,6 +126,27 @@ public partial class MainWindow : Window
         oneNote.ShowPage(pageId);
     }
 
+    /// <summary>Read-only check of the OneNote automation setup; changes nothing.</summary>
+    private async void CheckOneNote_Click(object sender, RoutedEventArgs e)
+    {
+        SetBusy(true);
+        StatusText.Text = "Checking the OneNote connection (read-only)...";
+        try
+        {
+            var report = await Task.Run(OneNoteDiagnostics.Run);
+            StatusText.Text = "OneNote connection check finished.";
+            new TextReportWindow(report) { Owner = this }.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            ShowError("The OneNote connection check could not be completed.", ex);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
     private void NotesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => SetBusy(_busy);
 
     private void AttachmentRow_DoubleClick(object sender, MouseButtonEventArgs e)
@@ -262,6 +283,7 @@ public partial class MainWindow : Window
         InspectButton.IsEnabled = !busy && FolderBox.Text.Length > 0;
         OpenReportButton.IsEnabled = !busy && _reportDirectory is not null;
         MigrateButton.IsEnabled = !busy && NotesGrid.SelectedItem is NoteRow;
+        CheckOneNoteButton.IsEnabled = !busy;
         Mouse.OverrideCursor = busy ? Cursors.AppStarting : null;
         if (!busy)
         {
