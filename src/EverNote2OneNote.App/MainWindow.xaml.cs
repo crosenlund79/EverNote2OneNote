@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Net.Http;
 using EverNote2OneNote.Inspection;
 using EverNote2OneNote.OneNote;
 using Microsoft.Win32;
@@ -13,11 +12,8 @@ namespace EverNote2OneNote.App;
 
 public partial class MainWindow : Window
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
-
     private readonly bool _quiet;
-    private readonly OneNoteSignIn _oneNote = new();
-    private readonly Dictionary<(string File, int Note), NoteMigrationResult> _migrated = [];
+    private readonly HashSet<(string File, int Note)> _migrated = [];
     private bool _busy;
     private string? _reportDirectory;
 
@@ -70,54 +66,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void Connect_Click(object sender, RoutedEventArgs e)
-    {
-        var clientId = OneNoteSignIn.SavedClientId();
-        if (clientId is null)
-        {
-            var setup = new ClientIdWindow { Owner = this };
-            if (setup.ShowDialog() != true)
-            {
-                return;
-            }
-            clientId = setup.ClientId;
-            OneNoteSignIn.SaveClientId(clientId);
-        }
-
-        SetBusy(true);
-        OneNoteStatus.Text = "Signing in - complete the Microsoft sign-in in your web browser...";
-        try
-        {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-            await _oneNote.SignInAsync(clientId, timeout.Token);
-            OneNoteStatus.Text = $"Connected to OneNote as {_oneNote.UserName}.";
-        }
-        catch (Exception ex)
-        {
-            OneNoteStatus.Text = "Not connected to OneNote.";
-            var (message, clientIdSuspect) = OneNoteSignIn.Explain(ex);
-            if (clientIdSuspect)
-            {
-                OneNoteSignIn.SaveClientId(null);
-            }
-            ShowError(message, null);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
     private async void Migrate_Click(object sender, RoutedEventArgs e)
     {
-        if (NotesGrid.SelectedItem is not NoteRow row || !_oneNote.IsSignedIn)
+        if (NotesGrid.SelectedItem is not NoteRow row)
         {
             return;
         }
         var key = (row.Summary.File.FullPath, row.Summary.Index);
-        if (_migrated.TryGetValue(key, out var previous) && previous.PageCreated &&
+        if (_migrated.Contains(key) &&
             MessageBox.Show(this,
-                $"\"{row.Title}\" has already been migrated in this session.\n\nMigrate it again? This creates a second page in OneNote.",
+                $"\"{row.Title}\" has already been migrated in this session.\n\nMigrate it again? This creates another new test notebook.",
                 "EverNote2OneNote", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
         {
             return;
@@ -126,7 +84,6 @@ public partial class MainWindow : Window
         SetBusy(true); // also disables the button, so repeated clicks cannot start a second migration
         try
         {
-            var client = new OneNoteClient(Http, _oneNote.GetAccessTokenAsync);
             var progress = new Progress<string>(status =>
             {
                 if (_busy)
@@ -134,15 +91,24 @@ public partial class MainWindow : Window
                     StatusText.Text = status;
                 }
             });
-            var result = await Task.Run(() => NoteMigrator.MigrateAsync(row.Summary, client, progress, CancellationToken.None));
+            var result = await Task.Run(() =>
+            {
+                ((IProgress<string>)progress).Report("Connecting to the OneNote desktop app...");
+                using var oneNote = OneNoteCom.Connect();
+                return LocalMigrator.Migrate(row.Summary, oneNote, LocalMigrator.DefaultRoot(), LocalMigrator.OneDriveFolders(), progress);
+            });
             if (result.PageCreated)
             {
-                _migrated[key] = result;
+                _migrated.Add(key);
             }
             StatusText.Text = result.PageCreated
-                ? $"Migrated \"{row.Title}\" to OneNote ({result.Notebook} > {result.Section})."
+                ? $"Migrated \"{row.Title}\" to the OneNote notebook \"{result.NotebookName}\"."
                 : $"\"{row.Title}\" was not migrated.";
-            new MigrationResultWindow(result) { Owner = this }.ShowDialog();
+            new MigrationResultWindow(result, ShowInOneNote) { Owner = this }.ShowDialog();
+        }
+        catch (OneNoteDesktopException ex)
+        {
+            ShowError("Migration stopped. " + ex.Message, null);
         }
         catch (Exception ex)
         {
@@ -152,6 +118,12 @@ public partial class MainWindow : Window
         {
             SetBusy(false);
         }
+    }
+
+    private static void ShowInOneNote(string pageId)
+    {
+        using var oneNote = OneNoteCom.Connect();
+        oneNote.ShowPage(pageId);
     }
 
     private void NotesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => SetBusy(_busy);
@@ -289,8 +261,7 @@ public partial class MainWindow : Window
         BrowseButton.IsEnabled = !busy;
         InspectButton.IsEnabled = !busy && FolderBox.Text.Length > 0;
         OpenReportButton.IsEnabled = !busy && _reportDirectory is not null;
-        ConnectButton.IsEnabled = !busy;
-        MigrateButton.IsEnabled = !busy && _oneNote.IsSignedIn && NotesGrid.SelectedItem is NoteRow;
+        MigrateButton.IsEnabled = !busy && NotesGrid.SelectedItem is NoteRow;
         Mouse.OverrideCursor = busy ? Cursors.AppStarting : null;
         if (!busy)
         {

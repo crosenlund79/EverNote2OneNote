@@ -26,9 +26,4 @@
     <ProjectReference Include="..\EverNote2OneNote\EverNote2OneNote.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Microsoft sign-in (delegated access to the user's OneNote). Tokens are kept in memory only. -->
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.91.1" />
-  </ItemGroup>
-
 </Project>

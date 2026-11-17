@@ -21,6 +21,7 @@ The intended flow is simply **Select source → Migrate → Verify → Report**.
 | Verification | Detect **missing, reordered or duplicated** text by comparing the ordered source text with the text read back from OneNote | A simple "every word exists" check would miss reordering and duplication. |
 | On a verification mismatch | **Report and allow controlled retries**; never auto-append text | Keeps the user in control. |
 | Malformed input | Never silently discard text. Isolate damage per note, recover text from raw markup, keep the original markup in the report, and grade the finding as an error | Priority 1 |
+| OneNote access | Local OneNote desktop automation API (COM), not Microsoft Graph | No cloud service, Azure tenant, app registration or sign-in; nothing is uploaded; the result is exported with OneNote's own `.onepkg` publishing. |
 | Technology | C# / .NET 10 (LTS), xUnit, WPF later | No paid services or AI dependencies. Minimal NuGet dependencies (none in the core library so far). |
 
 ## Components
@@ -43,7 +44,7 @@ ENEX files (read-only)
 |---|---|
 | `src/EverNote2OneNote/Enex` | `EnexScanner` (byte-level note boundaries, skips CDATA/comments), `EnexReader` (strict read-only parsing, per-note error isolation, raw recovery), note model |
 | `src/EverNote2OneNote/Text` | `EnmlText` (XML walk with built-in HTML entity table, no DTD or network access), `RawText` (fallback: removes only recognised tags), `TextBuilder` |
-| `src/EverNote2OneNote/OneNote` | Pilot 2: `PageBuilder` (ENML to OneNote HTML; all text kept, formatting simplified), `OneNoteClient` (Graph over `HttpClient`, creates and reads only), `TextVerifier` (whitespace-insensitive character diff: missing, extra, moved, duplicated), `NoteMigrator` (one note: read on demand, create the page, read it back, verify) |
+| `src/EverNote2OneNote/OneNote` | Pilot 2 (local OneNote desktop app): `PageXmlBuilder` (ENML to OneNote page XML; all text kept, formatting simplified; reads pages back), `IOneNoteDesktop` (the few COM operations used; implemented in the app by `OneNoteCom`), `LocalMigrator` (one note: new uniquely named local notebook, write page, read back, verify, export `.onepkg`), `TextVerifier` (whitespace-insensitive character diff: missing, extra, moved, duplicated) |
 | `src/EverNote2OneNote/Inspection` | `Inspector`, finding catalogue (`IssueCodes`), `Summary`, `ReportWriter` |
 | `src/EverNote2OneNote.Cli` | `e2o inspect` |
 | `src/EverNote2OneNote.App` | WPF test application: choose folder → Inspect Archive → results and report folder. The inspection runs on a background thread with per-file progress. A hidden `--self-test` switch lets the Windows build pipeline run the published exe end to end. |
@@ -70,7 +71,7 @@ ENEX files (read-only)
 Notebook names (taken from the file name), notebook stacks, note IDs, tag hierarchy and note history.
 Encrypted text cannot be read without its passphrase. It is reported, never silently skipped.
 
-## Known Microsoft Graph constraints (for later pilots)
+## Microsoft Graph constraints (investigated, not used)
 
 - Delegated sign-in only. App-only access to OneNote was retired on 31 March 2025.
 - Throttling: 120 requests per minute and 400 per hour per app per user; 429 responses carry no `Retry-After`.

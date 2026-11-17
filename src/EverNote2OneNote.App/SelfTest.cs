@@ -37,14 +37,27 @@ internal static class SelfTest
                                  window.NotesGrid.Items.Count == result.Notes.Count;
 
                 // The migration result window must load and render (no OneNote connection in the pipeline).
-                var sample = new NoteMigrationResult { NoteTitle = "Sample", Section = "Recipes", PageId = "p1", Method = "test", TitleMatches = true };
+                var sample = new LocalMigrationResult { NoteTitle = "Sample", NotebookName = "Test", Section = "Recipes", PageId = "p1", Method = "test", TitleMatches = true };
                 sample.Text = TextVerifier.Compare("one two", "one", []);
-                sample.Attachments.Add(new AttachmentOutcome("a.png", "image/png", 10, "In place", "Uploaded and found on the page", true));
-                var resultWindow = new MigrationResultWindow(sample) { ShowActivated = false };
+                sample.Attachments.Add(new AttachmentOutcome("a.png", "image/png", 10, "In place", "Transferred and found on the page", true));
+                sample.ExportProblem = "Not exported (self-test).";
+                var resultWindow = new MigrationResultWindow(sample, null) { ShowActivated = false };
                 resultWindow.Show();
                 await resultWindow.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
                 displayed &= resultWindow.DifferencesGrid.Items.Count == 1;
                 resultWindow.Close();
+
+                // OneNote desktop automation: on a PC without it (like the build server) there must be a clear explanation, not a crash.
+                string oneNote;
+                try
+                {
+                    using var com = OneNoteCom.Connect();
+                    oneNote = "available";
+                }
+                catch (OneNoteDesktopException ex)
+                {
+                    oneNote = ex.Message.Contains("Nothing was created", StringComparison.Ordinal) ? "unavailable-explained" : "unavailable-unexplained";
+                }
                 // Preview every image attachment: valid images must show, damaged ones must be reported, not crash.
                 var previews = new List<string>();
                 foreach (var row in ((IEnumerable<AttachmentRow>)window.AttachmentsGrid.ItemsSource)
@@ -59,7 +72,7 @@ internal static class SelfTest
 
                 log = $"notes={result.Notes.Count} notebooks={result.Files.Count} attachments={result.Attachments.Count} " +
                       $"findings={result.Issues.Count} errors={result.CountIssues(Severity.Error)} " +
-                      $"report={reportWritten} displayed={displayed} previews={string.Join(",", previews)}";
+                      $"report={reportWritten} displayed={displayed} previews={string.Join(",", previews)} onenote={oneNote}";
                 exitCode = reportWritten && displayed ? 0 : 1;
             }
             window.Close();

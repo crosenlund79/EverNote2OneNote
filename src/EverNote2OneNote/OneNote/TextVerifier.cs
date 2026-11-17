@@ -2,6 +2,11 @@ using System.Text;
 
 namespace EverNote2OneNote.OneNote;
 
+/// <summary>Where text added by the migration (not part of the original note) appears on the page.</summary>
+public enum AddedTextPosition { Start, Inline, End }
+
+public sealed record AddedText(string Text, AddedTextPosition Position);
+
 public enum DifferenceKind
 {
     /// <summary>Original text that is not on the page.</summary>
