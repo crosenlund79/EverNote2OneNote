@@ -43,6 +43,7 @@ ENEX files (read-only)
 |---|---|
 | `src/EverNote2OneNote/Enex` | `EnexScanner` (byte-level note boundaries, skips CDATA/comments), `EnexReader` (strict read-only parsing, per-note error isolation, raw recovery), note model |
 | `src/EverNote2OneNote/Text` | `EnmlText` (XML walk with built-in HTML entity table, no DTD or network access), `RawText` (fallback: removes only recognised tags), `TextBuilder` |
+| `src/EverNote2OneNote/OneNote` | Pilot 2: `PageBuilder` (ENML to OneNote HTML; all text kept, formatting simplified), `OneNoteClient` (Graph over `HttpClient`, creates and reads only), `TextVerifier` (whitespace-insensitive character diff: missing, extra, moved, duplicated), `NoteMigrator` (one note: read on demand, create the page, read it back, verify) |
 | `src/EverNote2OneNote/Inspection` | `Inspector`, finding catalogue (`IssueCodes`), `Summary`, `ReportWriter` |
 | `src/EverNote2OneNote.Cli` | `e2o inspect` |
 | `src/EverNote2OneNote.App` | WPF test application: choose folder → Inspect Archive → results and report folder. The inspection runs on a background thread with per-file progress. A hidden `--self-test` switch lets the Windows build pipeline run the published exe end to end. |

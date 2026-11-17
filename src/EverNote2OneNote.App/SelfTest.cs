@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows.Threading;
+using EverNote2OneNote.OneNote;
 
 namespace EverNote2OneNote.App;
 
@@ -32,7 +33,18 @@ internal static class SelfTest
                 bool reportWritten = File.Exists(Path.Combine(reportDirectory, "report.md"));
                 bool displayed = window.FindingsGrid.Items.Count == result.Issues.Count &&
                                  window.NotebooksGrid.Items.Count == result.Files.Count &&
-                                 window.AttachmentsGrid.Items.Count == result.Attachments.Count;
+                                 window.AttachmentsGrid.Items.Count == result.Attachments.Count &&
+                                 window.NotesGrid.Items.Count == result.Notes.Count;
+
+                // The migration result window must load and render (no OneNote connection in the pipeline).
+                var sample = new NoteMigrationResult { NoteTitle = "Sample", Section = "Recipes", PageId = "p1", Method = "test", TitleMatches = true };
+                sample.Text = TextVerifier.Compare("one two", "one", []);
+                sample.Attachments.Add(new AttachmentOutcome("a.png", "image/png", 10, "In place", "Uploaded and found on the page", true));
+                var resultWindow = new MigrationResultWindow(sample) { ShowActivated = false };
+                resultWindow.Show();
+                await resultWindow.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+                displayed &= resultWindow.DifferencesGrid.Items.Count == 1;
+                resultWindow.Close();
                 // Preview every image attachment: valid images must show, damaged ones must be reported, not crash.
                 var previews = new List<string>();
                 foreach (var row in ((IEnumerable<AttachmentRow>)window.AttachmentsGrid.ItemsSource)

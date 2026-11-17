@@ -15,10 +15,12 @@ public sealed record AttachmentRow(
     bool InBody, string Reference, string FileName, string Type, string Size,
     string Notebook, string Note, string NoteTitle, string NoteCreated, AttachmentSummary Attachment);
 
+public sealed record NoteRow(string Notebook, int Note, string Title, string Created, int Words, int Attachments, string Text, NoteSummary Summary);
+
 /// <summary>The inspection result shaped for display. No logic beyond grouping and counting.</summary>
 public sealed record ResultView(
     IReadOnlyList<Figure> Figures, IReadOnlyList<NotebookRow> Notebooks, IReadOnlyList<FindingRow> Findings,
-    IReadOnlyList<AttachmentRow> Attachments)
+    IReadOnlyList<AttachmentRow> Attachments, IReadOnlyList<NoteRow> Notes)
 {
     public static ResultView From(InspectionResult result)
     {
@@ -87,6 +89,11 @@ public sealed record ResultView(
                 a))
             .ToList();
 
-        return new ResultView(figures, notebooks, findings, attachments);
+        var notes = result.Notes
+            .Select(n => new NoteRow(n.File.Notebook, n.Index, n.Title ?? "(untitled)", Format.Date(n.Created), n.Words,
+                n.AttachmentCount, n.TextStatus.ToString(), n))
+            .ToList();
+
+        return new ResultView(figures, notebooks, findings, attachments, notes);
     }
 }

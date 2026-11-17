@@ -119,6 +119,30 @@ public sealed partial class EnexReader : IDisposable
     public void Dispose() => _stream.Dispose();
 
     /// <summary>
+    /// Reads one note on demand (read-only), starting at its recorded byte offset, without scanning the file.
+    /// Attachment data is hashed, not kept; use <see cref="ReadAttachmentData"/> to get it.
+    /// If the note cannot be parsed, <see cref="EnexNote.ParseError"/> is set and the fields read so far are returned.
+    /// </summary>
+    public static EnexNote ReadNoteAt(string path, long noteOffset, int index)
+    {
+        var note = new EnexNote { Index = index, ByteOffset = noteOffset, Line = 0 };
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        stream.Position = noteOffset;
+        var settings = SegmentSettings.Clone();
+        settings.ConformanceLevel = ConformanceLevel.Fragment; // the file continues after this note
+        try
+        {
+            using var r = XmlReader.Create(stream, settings);
+            NoteParser.Parse(r, note);
+        }
+        catch (Exception ex) when (ex is XmlException or FormatException or DecoderFallbackException or InvalidOperationException or ArgumentException)
+        {
+            note.ParseError = ex.Message;
+        }
+        return note;
+    }
+
+    /// <summary>
     /// Decodes one attachment on demand. The file is opened read-only, parsing starts at the note's byte offset,
     /// other attachments are skipped without decoding, and the decoded data is checked against the expected MD5.
     /// </summary>

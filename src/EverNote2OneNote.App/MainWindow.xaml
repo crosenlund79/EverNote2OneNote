@@ -25,6 +25,13 @@
             <Button x:Name="OpenReportButton" Content="Open Report Folder" Padding="18,6" Margin="8,0,0,0" IsEnabled="False" Click="OpenReport_Click" />
         </StackPanel>
 
+        <!-- 3. OneNote (single-note migration) -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,8,0,0">
+            <Button x:Name="ConnectButton" Content="Connect to OneNote" Padding="18,6" Click="Connect_Click" />
+            <Button x:Name="MigrateButton" Content="Migrate Selected Note" Padding="18,6" Margin="8,0,0,0" FontWeight="SemiBold" IsEnabled="False" Click="Migrate_Click" />
+            <TextBlock x:Name="OneNoteStatus" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#555" Text="Not connected to OneNote." />
+        </StackPanel>
+
         <!-- Progress -->
         <StackPanel DockPanel.Dock="Top" Margin="0,12,0,0">
             <ProgressBar x:Name="ProgressBar" Height="12" Minimum="0" Maximum="1" />
@@ -95,6 +102,25 @@
                         </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
+            </TabItem>
+            <TabItem x:Name="NotesTab" Header="Notes">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="4,4,4,6" Foreground="#555" TextWrapping="Wrap"
+                               Text="To migrate one note: select it here, click Connect to OneNote, then Migrate Selected Note. The page is created in the OneNote notebook &quot;EverNote2OneNote Test&quot;; existing notebooks and pages are never changed." />
+                    <DataGrid x:Name="NotesGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                              SelectionMode="Single" SelectionUnit="FullRow" SelectionChanged="NotesGrid_SelectionChanged"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E5E5E5">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Notebook" Binding="{Binding Notebook}" Width="150" />
+                            <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="45" />
+                            <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*" />
+                            <DataGridTextColumn Header="Created" Binding="{Binding Created}" Width="135" />
+                            <DataGridTextColumn Header="Words" Binding="{Binding Words}" Width="60" />
+                            <DataGridTextColumn Header="Attachments" Binding="{Binding Attachments}" Width="85" />
+                            <DataGridTextColumn Header="Text" Binding="{Binding Text}" Width="90" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </TabItem>
             <TabItem x:Name="NotebooksTab" Header="Notebooks">
                 <DataGrid x:Name="NotebooksGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"

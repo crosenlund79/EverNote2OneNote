@@ -4,14 +4,20 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Net.Http;
 using EverNote2OneNote.Inspection;
+using EverNote2OneNote.OneNote;
 using Microsoft.Win32;
 
 namespace EverNote2OneNote.App;
 
 public partial class MainWindow : Window
 {
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
+
     private readonly bool _quiet;
+    private readonly OneNoteSignIn _oneNote = new();
+    private readonly Dictionary<(string File, int Note), NoteMigrationResult> _migrated = [];
     private bool _busy;
     private string? _reportDirectory;
 
@@ -63,6 +69,92 @@ public partial class MainWindow : Window
             ShowError("The report folder could not be opened.", ex);
         }
     }
+
+    private async void Connect_Click(object sender, RoutedEventArgs e)
+    {
+        var clientId = OneNoteSignIn.SavedClientId();
+        if (clientId is null)
+        {
+            var setup = new ClientIdWindow { Owner = this };
+            if (setup.ShowDialog() != true)
+            {
+                return;
+            }
+            clientId = setup.ClientId;
+            OneNoteSignIn.SaveClientId(clientId);
+        }
+
+        SetBusy(true);
+        OneNoteStatus.Text = "Signing in - complete the Microsoft sign-in in your web browser...";
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            await _oneNote.SignInAsync(clientId, timeout.Token);
+            OneNoteStatus.Text = $"Connected to OneNote as {_oneNote.UserName}.";
+        }
+        catch (Exception ex)
+        {
+            OneNoteStatus.Text = "Not connected to OneNote.";
+            var (message, clientIdSuspect) = OneNoteSignIn.Explain(ex);
+            if (clientIdSuspect)
+            {
+                OneNoteSignIn.SaveClientId(null);
+            }
+            ShowError(message, null);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async void Migrate_Click(object sender, RoutedEventArgs e)
+    {
+        if (NotesGrid.SelectedItem is not NoteRow row || !_oneNote.IsSignedIn)
+        {
+            return;
+        }
+        var key = (row.Summary.File.FullPath, row.Summary.Index);
+        if (_migrated.TryGetValue(key, out var previous) && previous.PageCreated &&
+            MessageBox.Show(this,
+                $"\"{row.Title}\" has already been migrated in this session.\n\nMigrate it again? This creates a second page in OneNote.",
+                "EverNote2OneNote", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        SetBusy(true); // also disables the button, so repeated clicks cannot start a second migration
+        try
+        {
+            var client = new OneNoteClient(Http, _oneNote.GetAccessTokenAsync);
+            var progress = new Progress<string>(status =>
+            {
+                if (_busy)
+                {
+                    StatusText.Text = status;
+                }
+            });
+            var result = await Task.Run(() => NoteMigrator.MigrateAsync(row.Summary, client, progress, CancellationToken.None));
+            if (result.PageCreated)
+            {
+                _migrated[key] = result;
+            }
+            StatusText.Text = result.PageCreated
+                ? $"Migrated \"{row.Title}\" to OneNote ({result.Notebook} > {result.Section})."
+                : $"\"{row.Title}\" was not migrated.";
+            new MigrationResultWindow(result) { Owner = this }.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            ShowError("The migration could not be completed.", ex);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private void NotesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => SetBusy(_busy);
 
     private void AttachmentRow_DoubleClick(object sender, MouseButtonEventArgs e)
     {
@@ -163,6 +255,8 @@ public partial class MainWindow : Window
         FindingsGrid.ItemsSource = view.Findings;
         NotebooksGrid.ItemsSource = view.Notebooks;
         AttachmentsGrid.ItemsSource = view.Attachments;
+        NotesGrid.ItemsSource = view.Notes;
+        NotesTab.Header = $"Notes ({view.Notes.Count})";
         FindingsTab.Header = $"Findings ({view.Findings.Count})";
         NotebooksTab.Header = $"Notebooks ({view.Notebooks.Count})";
         int notInBody = view.Attachments.Count(a => !a.InBody);
@@ -182,6 +276,7 @@ public partial class MainWindow : Window
         FindingsGrid.ItemsSource = null;
         NotebooksGrid.ItemsSource = null;
         AttachmentsGrid.ItemsSource = null;
+        NotesGrid.ItemsSource = null;
         SummaryBox.Text = "";
         ProgressBar.Value = 0;
         StatusText.Text = "Looking for .enex files...";
@@ -194,6 +289,8 @@ public partial class MainWindow : Window
         BrowseButton.IsEnabled = !busy;
         InspectButton.IsEnabled = !busy && FolderBox.Text.Length > 0;
         OpenReportButton.IsEnabled = !busy && _reportDirectory is not null;
+        ConnectButton.IsEnabled = !busy;
+        MigrateButton.IsEnabled = !busy && _oneNote.IsSignedIn && NotesGrid.SelectedItem is NoteRow;
         Mouse.OverrideCursor = busy ? Cursors.AppStarting : null;
         if (!busy)
         {
